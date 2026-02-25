@@ -16,6 +16,7 @@ from local_planner import RoadOption
 from behavior_types import Cautious, Aggressive, Normal
 
 from misc import get_speed, positive, is_within_distance, compute_distance
+from overtake_manager import OvertakeManager  # Assicurati di averlo importato
 
 class BehaviorAgent(BasicAgent):
     """
@@ -50,6 +51,7 @@ class BehaviorAgent(BasicAgent):
         self._min_speed = 5
         self._behavior = None
         self._sampling_resolution = 4.5
+        self._overtake_manager = OvertakeManager(self._vehicle, self._world, self._map, self._global_planner)
 
         # Parameters for agent behavior
         if behavior == 'cautious':
@@ -239,7 +241,6 @@ class BehaviorAgent(BasicAgent):
     def run_step(self, debug=False):
         """
         Execute one step of navigation.
-
             :param debug: boolean for debugging
             :return control: carla.VehicleControl
         """
@@ -260,27 +261,82 @@ class BehaviorAgent(BasicAgent):
         walker_state, walker, w_distance = self.pedestrian_avoid_manager(ego_vehicle_wp)
 
         if walker_state:
-            # Distance is computed from the center of the two cars,
-            # we use bounding boxes to calculate the actual distance
             distance = w_distance - max(
                 walker.bounding_box.extent.y, walker.bounding_box.extent.x) - max(
-                    self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
+                self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
 
-            # Emergency brake if the car is very close.
             if distance < self._behavior.braking_distance:
                 return self.emergency_stop()
+
+        # ---------------------------------------------------------
+        # SCENARIO AVANZATO: Gestione Ostacoli e Sorpasso
+        # ---------------------------------------------------------
+        o_state, obstacle, o_distance = self.static_obstacle_manager(
+            ego_vehicle_wp,
+            static_element="*static.prop.trafficwarning*"
+        )
+
+        current_plan = self._local_planner.get_plan()
+
+        if o_state and not self._overtake_manager.in_overtake and len(current_plan) > 0:
+
+            # Calcolo dinamico della distanza reale (da paraurti a ostacolo)
+            obs_extent = max(obstacle.bounding_box.extent.y, obstacle.bounding_box.extent.x) if hasattr(obstacle,
+                                                                                                        'bounding_box') else 1.0
+            ego_extent = max(self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
+            real_distance = o_distance - obs_extent - ego_extent
+
+            end_destination_loc = current_plan[-1][0].transform.location
+
+            # Chiediamo all'OvertakeManager la rotta di sorpasso
+            overtake_path = self._overtake_manager.get_overtake_path(ego_vehicle_wp, o_distance, end_destination_loc)
+
+            if overtake_path is not None:
+                # 1. LA VIA E' LIBERA!
+                print(f"[SORPASSO] Via libera. Ostacolo a {real_distance:.1f}m. Inizio sterzata!")
+                self._local_planner.set_global_plan(overtake_path, clean_queue=True)
+                self._overtake_manager.in_overtake = True
+
+                # Applichiamo subito la sterzata
+                self._local_planner.set_speed(self._behavior.max_speed)
+                return self._local_planner.run_step(debug=debug)
+
+            else:
+                # 2. ARRIVA QUALCUNO: Frenata modulare intelligente
+                safe_stop_distance = 6.0  # Distanza in cui ci fermiamo completamente
+                slowdown_start_distance = 45.0  # Distanza a cui iniziamo a rallentare
+
+                if real_distance < safe_stop_distance:
+                    print(f"[ATTESA] Ostacolo a {real_distance:.1f}m. Spazio critico! Freno d'emergenza e aspetto.")
+                    return self.emergency_stop()
+                else:
+                    # Calcola il fattore di rallentamento progressivo (da 1.0 a 0.0)
+                    speed_factor = (real_distance - safe_stop_distance) / (slowdown_start_distance - safe_stop_distance)
+                    speed_factor = max(0.0, min(1.0, speed_factor))
+
+                    # Rallentiamo in modo proporzionale, senza mai scendere sotto i 5 km/h finché non ci fermiamo
+                    target_speed = speed_factor * self._behavior.max_speed
+                    target_speed = max(5.0, target_speed)
+
+                    print(
+                        f"[AVVICINAMENTO] Ostacolo a {real_distance:.1f}m. Traffico opposto, rallento a {target_speed:.1f} km/h.")
+                    self._local_planner.set_speed(target_speed)
+                    return self._local_planner.run_step(debug=debug)
+
+        elif self._overtake_manager.in_overtake:
+            if not o_state:
+                print("[FINE SORPASSO] L'ostacolo è alle spalle. Manovra completata.")
+                self._overtake_manager.in_overtake = False
+        # ---------------------------------------------------------
 
         # 2.2: Car following behaviors
         vehicle_state, vehicle, distance = self.collision_and_car_avoid_manager(ego_vehicle_wp)
 
         if vehicle_state:
-            # Distance is computed from the center of the two cars,
-            # we use bounding boxes to calculate the actual distance
             distance = distance - max(
                 vehicle.bounding_box.extent.y, vehicle.bounding_box.extent.x) - max(
-                    self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
+                self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
 
-            # Emergency brake if the car is very close.
             if distance < self._behavior.braking_distance:
                 return self.emergency_stop()
             else:
@@ -316,3 +372,28 @@ class BehaviorAgent(BasicAgent):
         control.brake = self._max_brake
         control.hand_brake = False
         return control
+
+    def static_obstacle_manager(self, waypoint, static_element="*static.prop*", angle_interval=[0, 90]):
+        """
+        Rileva ostacoli statici (come coni stradali) davanti al veicolo.
+        Restituisce uno stato booleano, l'ostacolo e la sua distanza.
+        """
+        # Filtra tutti gli attori nel mondo in base al nome dell'elemento statico
+        obstacles_list = self._world.get_actors().filter(static_element)
+
+        search_distance = 60.0
+
+        # Mantieni solo gli ostacoli che sono davanti al veicolo entro 20 metri
+        obstacles_list = [o for o in obstacles_list if is_within_distance(
+            o.get_transform(), self._vehicle.get_transform(), search_distance, angle_interval=angle_interval)]
+
+        if not obstacles_list:
+            return False, None, -1
+
+        # Ordina gli ostacoli per distanza dal waypoint attuale dell'ego vehicle
+        def dist(o): return o.get_location().distance(waypoint.transform.location)
+
+        obstacles_list = sorted(obstacles_list, key=dist)
+
+        closest_obstacle = obstacles_list[0]
+        return True, closest_obstacle, dist(closest_obstacle)

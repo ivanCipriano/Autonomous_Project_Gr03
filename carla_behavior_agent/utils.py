@@ -45,7 +45,7 @@ class Streamer():
         self.verbose = False
 
         self.data ={
-                "url" : "http://"+IP+":8888/new_frame",
+                "url" : "http://"+IP+":9806/new_frame",
                 "RGB" : {
                     "frame_lock" : threading.Lock(),
                     "frame" : None,

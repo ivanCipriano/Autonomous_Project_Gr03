@@ -8,7 +8,7 @@ This module provides an NPC agent to control the ego vehicle
 """
 
 from __future__ import print_function
-
+import os
 import carla
 from behavior_agent import BehaviorAgent
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
@@ -106,8 +106,9 @@ class MyTeamAgent(AutonomousAgent):
                 "throttle":controls.throttle, 
                 "brake": controls.brake,
                 })
+
             if len(self.configs["SaveSpeedData"]) > 0:
-                with open("team_code/"+self.configs["SaveSpeedData"],"a") as fp:
+                with open(self.configs["SaveSpeedData"],"a") as fp:
                     fp.write(str(timestamp)+";"+str(input_data["Speed"][1]["speed"] * 3.6)+";"+str(self.configs["target_speed"])+"\n")
                     fp.close()
                     
