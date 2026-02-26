@@ -15,7 +15,7 @@ from basic_agent import BasicAgent
 from local_planner import RoadOption
 from behavior_types import Cautious, Aggressive, Normal
 
-from misc import get_speed, positive, is_within_distance, compute_distance
+from misc import *
 from overtake_manager import OvertakeManager  # Assicurati di averlo importato
 
 class BehaviorAgent(BasicAgent):
@@ -134,17 +134,25 @@ class BehaviorAgent(BasicAgent):
         """
         This module is in charge of warning in case of a collision
         and managing possible tailgating chances.
-
-            :param location: current location of the agent
-            :param waypoint: current waypoint of the agent
-            :return vehicle_state: True if there is a vehicle nearby, False if not
-            :return vehicle: nearby vehicle
-            :return distance: distance to nearby vehicle
         """
-
         vehicle_list = self._world.get_actors().filter("*vehicle*")
-        def dist(v): return v.get_location().distance(waypoint.transform.location)
+
+        def dist(v):
+            return v.get_location().distance(waypoint.transform.location)
+
+        # Filtriamo i veicoli troppo lontani
         vehicle_list = [v for v in vehicle_list if dist(v) < 45 and v.id != self._vehicle.id]
+
+        # --- FASE 1: LOGICA IDENTIFICAZIONE BICICLETTE ---
+        # Filtriamo le biciclette che si trovano nel nostro stesso angolo di visuale frontale
+        bicycle_list = [b for b in vehicle_list if is_a_bicycle(b.type_id) and
+                        is_within_distance(b.get_transform(), self._vehicle.get_transform(), 20,
+                                           angle_interval=[0, 90])]
+
+        # Se c'è una bicicletta davanti a noi, diamole la priorità assoluta come veicolo da seguire
+        if len(bicycle_list) > 0:
+            closest_bike = sorted(bicycle_list, key=dist)[0]
+            return True, closest_bike, dist(closest_bike)
 
         if self._direction == RoadOption.CHANGELANELEFT:
             vehicle_state, vehicle, distance = self._vehicle_obstacle_detected(
@@ -371,18 +379,31 @@ class BehaviorAgent(BasicAgent):
                 self._local_planner.set_lateral_offset(0.0)
         # ---------------------------------------------------------
 
-        # 2.2: Car following behaviors
+        # ---------------------------------------------------------
+        # 2.2: Car & Bicycle following behaviors
+        # ---------------------------------------------------------
         vehicle_state, vehicle, distance = self.collision_and_car_avoid_manager(ego_vehicle_wp)
 
         if vehicle_state:
-            distance = distance - max(
+            # Calcolo della distanza reale tra i due mezzi sottraendo i rispettivi bounding box
+            real_distance = distance - max(
                 vehicle.bounding_box.extent.y, vehicle.bounding_box.extent.x) - max(
                 self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
 
-            if distance < self._behavior.braking_distance:
+            # Debug: Stampiamo se stiamo seguendo una bici
+            if is_a_bicycle(vehicle.type_id):
+                print(
+                    f"[BICICLETTA] Rilevata bici a {real_distance:.1f}m. Modulo ACC (Adaptive Cruise Control) in azione.")
+
+            # Se siamo criticamente vicini, frenata d'emergenza
+            if real_distance < self._behavior.braking_distance:
+                if is_a_bicycle(vehicle.type_id):
+                    print("[BICICLETTA] Troppo vicini! Frenata di emergenza attiva.")
                 return self.emergency_stop()
             else:
-                control = self.car_following_manager(vehicle, distance)
+                # Altrimenti inseguiamo dolcemente ricalcando la sua velocità
+                control = self.car_following_manager(vehicle, real_distance)
+                return control
 
         # 3: Intersection behavior
         elif self._incoming_waypoint.is_junction and (self._incoming_direction in [RoadOption.LEFT, RoadOption.RIGHT]):

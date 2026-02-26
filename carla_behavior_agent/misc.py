@@ -169,3 +169,11 @@ def positive(num):
         :param num: value to check
     """
     return num if num > 0.0 else 0.0
+
+def is_a_bicycle(type_id):
+    """
+    Verifica se un veicolo è una bicicletta analizzando il suo type_id.
+    In CARLA i modelli di bici includono 'crossbike', 'omafiets', 'century', ecc.
+    """
+    keywords = ['bicycle', 'crossbike', 'omafiets', 'century']
+    return any(keyword in type_id for keyword in keywords)
