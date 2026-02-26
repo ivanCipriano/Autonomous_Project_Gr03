@@ -276,57 +276,99 @@ class BehaviorAgent(BasicAgent):
             static_element="*static.prop.trafficwarning*"
         )
 
+        c_state, cone, c_distance = self.static_obstacle_manager(
+            ego_vehicle_wp,
+            static_element="*static.prop.constructioncone*"
+        )
+
         current_plan = self._local_planner.get_plan()
 
+        # LOGICA A: Gestione Sorpasso Cartelli/Ostacoli
         if o_state and not self._overtake_manager.in_overtake and len(current_plan) > 0:
 
-            # Calcolo dinamico della distanza reale (da paraurti a ostacolo)
-            obs_extent = max(obstacle.bounding_box.extent.y, obstacle.bounding_box.extent.x) if hasattr(obstacle,
-                                                                                                        'bounding_box') else 1.0
+            obs_extent = max(obstacle.bounding_box.extent.y, obstacle.bounding_box.extent.x) if hasattr(
+                obstacle, 'bounding_box') else 1.0
             ego_extent = max(self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
             real_distance = o_distance - obs_extent - ego_extent
 
             end_destination_loc = current_plan[-1][0].transform.location
-
-            # Chiediamo all'OvertakeManager la rotta di sorpasso
-            overtake_path = self._overtake_manager.get_overtake_path(ego_vehicle_wp, o_distance, end_destination_loc)
+            overtake_path = self._overtake_manager.get_overtake_path(ego_vehicle_wp, o_distance,
+                                                                     end_destination_loc)
 
             if overtake_path is not None:
-                # 1. LA VIA E' LIBERA!
-                print(f"[SORPASSO] Via libera. Ostacolo a {real_distance:.1f}m. Inizio sterzata!")
+                print(
+                    f"[SORPASSO] Via libera. Ostacolo a {real_distance:.1f}m. Inizio sterzata fluida e controllata.")
                 self._local_planner.set_global_plan(overtake_path, clean_queue=True)
                 self._overtake_manager.in_overtake = True
 
-                # Applichiamo subito la sterzata
-                self._local_planner.set_speed(self._behavior.max_speed)
+                self._local_planner.set_speed(25.0)
                 return self._local_planner.run_step(debug=debug)
 
             else:
-                # 2. ARRIVA QUALCUNO: Frenata modulare intelligente
-                safe_stop_distance = 6.0  # Distanza in cui ci fermiamo completamente
-                slowdown_start_distance = 45.0  # Distanza a cui iniziamo a rallentare
+                # LOGICA DI FRENATA INTATTA AL 100%
+                safe_stop_distance = 8.0
+                slowdown_start_distance = 50.0
 
                 if real_distance < safe_stop_distance:
-                    print(f"[ATTESA] Ostacolo a {real_distance:.1f}m. Spazio critico! Freno d'emergenza e aspetto.")
-                    return self.emergency_stop()
-                else:
-                    # Calcola il fattore di rallentamento progressivo (da 1.0 a 0.0)
-                    speed_factor = (real_distance - safe_stop_distance) / (slowdown_start_distance - safe_stop_distance)
-                    speed_factor = max(0.0, min(1.0, speed_factor))
-
-                    # Rallentiamo in modo proporzionale, senza mai scendere sotto i 5 km/h finché non ci fermiamo
-                    target_speed = speed_factor * self._behavior.max_speed
-                    target_speed = max(5.0, target_speed)
-
                     print(
-                        f"[AVVICINAMENTO] Ostacolo a {real_distance:.1f}m. Traffico opposto, rallento a {target_speed:.1f} km/h.")
+                        f"[ATTESA] Auto opposta in avvicinamento. Fermo a {real_distance:.1f}m dall'ostacolo.")
+                    control = self.emergency_stop()
+                    control.brake = 1.0
+                    return control
+                else:
+                    speed_factor = (real_distance - safe_stop_distance) / (
+                            slowdown_start_distance - safe_stop_distance)
+                    speed_factor = max(0.0, min(1.0, speed_factor))
+                    target_speed = speed_factor * self._behavior.max_speed
+                    if real_distance < safe_stop_distance + 10.0:
+                        target_speed = 10.0
+                    print(
+                        f"[AVVICINAMENTO] Ostacolo a {real_distance:.1f}m. Traffico presente, rallento a {target_speed:.1f} km/h.")
                     self._local_planner.set_speed(target_speed)
                     return self._local_planner.run_step(debug=debug)
 
+        # LOGICA B: Gestione Durante e Fine Sorpasso (RISOLUZIONE PROBLEMA 1 E 3)
         elif self._overtake_manager.in_overtake:
-            if not o_state:
-                print("[FINE SORPASSO] L'ostacolo è alle spalle. Manovra completata.")
+
+            # Blocchiamo la velocità a 25.0 km/h durante tutta la fase di sorpasso e rientro
+            self._local_planner.set_speed(25.0)
+
+            # La manovra finisce SOLO QUANDO siamo fisicamente tornati nella corsia di partenza
+            # In questo modo, l'auto non sbanderà né accelererà finché il rientro non è perfetto.
+            if not o_state and ego_vehicle_wp.lane_id == self._overtake_manager.original_lane_id:
+                print("[FINE SORPASSO] Auto rientrata stabilmente in corsia. Manovra completata.")
                 self._overtake_manager.in_overtake = False
+                self._local_planner.set_lateral_offset(0.0)
+
+        # LOGICA C: Aggiramento Coni tramite Offset Laterale
+        elif c_state and not self._overtake_manager.in_overtake:
+            cone_wp = self._map.get_waypoint(cone.get_location())
+            cone_extent_y = cone.bounding_box.extent.y if hasattr(cone, 'bounding_box') else 0.5
+            ego_extent_y = self._vehicle.bounding_box.extent.y
+
+            # Se il cono è esattamente nella nostra STESSA corsia
+            if cone_wp.lane_id == ego_vehicle_wp.lane_id:
+                # Offset negativo sposta l'auto a sinistra rispetto al centro
+                offset_value = -(1.5 * cone_extent_y + ego_extent_y)
+                print(f"[CONI] Cono nella nostra corsia. Spostamento morbido a SINISTRA: {offset_value:.2f}")
+                self._local_planner.set_lateral_offset(offset_value)
+
+            # Se il cono è in un'ALTRA corsia
+            else:
+                dist_fisica = self._vehicle.get_location().distance(cone.get_location())
+
+                if dist_fisica < 3.0:
+                    offset_value = (0.5 * cone_extent_y + ego_extent_y)
+                    print(
+                        f"[CONI] Cono in mezzeria troppo vicino ({dist_fisica:.1f}m). Piccolo offset a DESTRA.")
+                    self._local_planner.set_lateral_offset(offset_value)
+                else:
+                    self._local_planner.set_lateral_offset(0.0)
+
+        # LOGICA D: Ripristino offset se la strada è pulita
+        else:
+            if not self._overtake_manager.in_overtake:
+                self._local_planner.set_lateral_offset(0.0)
         # ---------------------------------------------------------
 
         # 2.2: Car following behaviors

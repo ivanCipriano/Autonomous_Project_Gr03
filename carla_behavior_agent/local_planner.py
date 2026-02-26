@@ -149,6 +149,14 @@ class LocalPlanner(object):
                   "Use 'follow_speed_limits' to deactivate this")
         self._target_speed = speed
 
+    def set_lateral_offset(self, offset: float) -> None:
+        """
+        Set the lateral offset of the controller to avoid obstacles like cones.
+        """
+        if self._vehicle_controller is not None:
+            # Il controller di CARLA di default usa _lat_controller per lo sterzo
+            self._vehicle_controller._lat_controller.offset = offset
+
     def follow_speed_limits(self, value=True):
         """
         Activates a flag that makes the max speed dynamically vary according to the spped limits
