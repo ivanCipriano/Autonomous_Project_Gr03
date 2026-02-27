@@ -177,3 +177,30 @@ def is_a_bicycle(type_id):
     """
     keywords = ['bicycle', 'crossbike', 'omafiets', 'century']
     return any(keyword in type_id for keyword in keywords)
+
+def is_road_straight(ego_yaw : float, vehicle_yaw : float, tolerance : int = 10) -> bool:
+    """
+    This function checks if the road is straight. In particular, it checks if the yaw of the ego vehicle 
+    and the vehicle in front are similar.
+    
+        :param ego_yaw (float): yaw of the ego vehicle.
+        :param vehicle_yaw (float): yaw of the vehicle in front.
+        :param tolerance (int): tolerance value to check if the road is straight.
+        
+        :return (bool): True if the road is straight, False otherwise.
+    """
+    return abs(ego_yaw - vehicle_yaw) < tolerance
+
+def is_bicycle_near_center(vehicle_location : carla.Location, ego_vehicle_wp : carla.Waypoint) -> bool:
+    """
+    This function checks if the bicycle is near the center of the lane.
+    
+        :param vehicle_location (carla.Location): location of the vehicle.
+        :param ego_vehicle_wp (carla.Waypoint): waypoint of the ego vehicle.
+        
+        :return (bool): True if the bicycle is near the center of the lane, False otherwise.
+    """
+    lane_center_offset = 0.3                   # How close to the center the bicycle needs to be considered in the center
+    vehicle_y = vehicle_location.y
+    lane_center_y = ego_vehicle_wp.transform.location.y
+    return abs(vehicle_y - lane_center_y) < lane_center_offset
