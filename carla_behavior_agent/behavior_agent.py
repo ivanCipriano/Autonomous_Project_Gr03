@@ -122,10 +122,10 @@ class BehaviorAgent(BasicAgent):
             return v.get_location().distance(waypoint.transform.location)
 
         # -------------------------------------------------------------
-        # 1. RILEVAMENTO BICI (Soglia a 20m per un'anticipazione perfetta)
+        # 1. RILEVAMENTO BICI (Soglia a 25m per scarto tempestivo)
         # -------------------------------------------------------------
         bicycle_list = [b for b in vehicle_list if is_a_bicycle(b.type_id) and 
-                        is_within_distance(b.get_transform(), self._vehicle.get_transform(), 20, angle_interval=[0, 90])
+                        is_within_distance(b.get_transform(), self._vehicle.get_transform(), 25, angle_interval=[0, 90])
                         and b.id != self._vehicle.id]
         
         if bicycle_list:
@@ -133,23 +133,26 @@ class BehaviorAgent(BasicAgent):
             return True, closest_bike, dist(closest_bike)
 
         # -------------------------------------------------------------
-        # 2. RILEVAMENTO AUTO STANDARD (Soglia a 15m)
+        # 2. RILEVAMENTO AUTO STANDARD (Orizzonte aumentato a 45 metri!)
         # -------------------------------------------------------------
-        car_list = [v for v in vehicle_list if dist(v) < 15 and v.id != self._vehicle.id and not is_a_bicycle(v.type_id)]
+        # 45 metri garantiscono al sistema lo spazio fisico per frenare da 50+ km/h
+        car_list = [v for v in vehicle_list if dist(v) < 45 and v.id != self._vehicle.id and not is_a_bicycle(v.type_id)]
 
         if not car_list:
             return False, None, -1
 
+        # Usiamo self._speed_limit come raggio visivo profondo al posto di limitarlo a /3
         if self._direction == RoadOption.CHANGELANELEFT:
             vehicle_state, vehicle, distance = self._vehicle_obstacle_detected(
-                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit / 2), up_angle_th=180, lane_offset=-1)
+                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit), up_angle_th=180, lane_offset=-1)
         elif self._direction == RoadOption.CHANGELANERIGHT:
             vehicle_state, vehicle, distance = self._vehicle_obstacle_detected(
-                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit / 2), up_angle_th=180, lane_offset=1)
+                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit), up_angle_th=180, lane_offset=1)
         else:
             vehicle_state, vehicle, distance = self._vehicle_obstacle_detected(
-                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit / 3), up_angle_th=30)
+                car_list, max(self._behavior.min_proximity_threshold, self._speed_limit), up_angle_th=30)
 
+            # Controllo anti-tailgating per cambiare corsia se siamo bloccati dietro a un'auto lenta
             if not vehicle_state and self._direction == RoadOption.LANEFOLLOW \
                     and not waypoint.is_junction and self._speed > 10 \
                     and self._behavior.tailgate_counter == 0:
@@ -166,13 +169,10 @@ class BehaviorAgent(BasicAgent):
         
         def dist(w): return w.get_location().distance(waypoint.transform.location)
         
-        # Soglia abbassata a 15 metri (evitiamo trigger inutili a grandi distanze)
         walker_list = [w for w in walker_list if dist(w) < 15]
 
         # -------------------------------------------------------------
         # FILTRO INTELLIGENTE: ELIMINA I CICLISTI/MOTOCICLISTI
-        # Se un "pedone" si trova fisicamente nello stesso punto di un veicolo, 
-        # in realtà è il suo conducente. Lo ignoriamo per non far saltare la logica veicoli.
         # -------------------------------------------------------------
         valid_walkers = []
         for w in walker_list:
@@ -180,7 +180,6 @@ class BehaviorAgent(BasicAgent):
             is_rider = False
             for v in vehicle_list:
                 v_loc = v.get_location()
-                # Calcolo della distanza 2D
                 if math.hypot(w_loc.x - v_loc.x, w_loc.y - v_loc.y) < 2.0:
                     is_rider = True
                     break
@@ -208,26 +207,38 @@ class BehaviorAgent(BasicAgent):
         """
         Module in charge of car-following behaviors when there's someone in front of us.
         """
+        import sys
         vehicle_speed = get_speed(vehicle)
         delta_v = max(1, (self._speed - vehicle_speed) / 3.6)
         ttc = distance / delta_v if delta_v != 0 else distance / np.nextafter(0., 1.)
 
+        # Se il Time To Collision (TTC) è sotto la soglia di sicurezza, rallenta gradualmente
         if self._behavior.safety_time > ttc > 0.0:
             target_speed = min([
                 positive(vehicle_speed - self._behavior.speed_decrease),
                 self._behavior.max_speed,
                 self._speed_limit - self._behavior.speed_lim_dist])
+            
+            print(f"[CAR FOLLOWING] Auto davanti a {distance:.1f}m. Rallento dolcemente a {target_speed:.1f} km/h.")
+            sys.stdout.flush()
+            
             self._local_planner.set_speed(target_speed)
             control = self._local_planner.run_step(debug=debug)
 
+        # Mantenimento della distanza
         elif 2 * self._behavior.safety_time > ttc >= self._behavior.safety_time:
             target_speed = min([
                 max(self._min_speed, vehicle_speed),
                 self._behavior.max_speed,
                 self._speed_limit - self._behavior.speed_lim_dist])
+            
+            print(f"[CAR FOLLOWING] In accodamento. Mantengo la velocità a {target_speed:.1f} km/h.")
+            sys.stdout.flush()
+            
             self._local_planner.set_speed(target_speed)
             control = self._local_planner.run_step(debug=debug)
 
+        # Condotta normale se la distanza è enorme
         else:
             target_speed = min([
                 self._behavior.max_speed,
@@ -242,8 +253,6 @@ class BehaviorAgent(BasicAgent):
         Rileva ostacoli statici davanti al veicolo.
         """
         obstacles_list = self._world.get_actors().filter(static_element)
-
-        # Modificato a 45m per evitare rilevamenti troppo precoci come mostrato nel tuo log
         search_distance = 45.0
 
         obstacles_list = [o for o in obstacles_list if is_within_distance(
@@ -350,7 +359,7 @@ class BehaviorAgent(BasicAgent):
                     self._local_planner.set_lateral_offset(0.0)
 
         # ---------------------------------------------------------
-        # 2.2: Car & Bicycle behaviors
+        # 2.2: Car & Bicycle behaviors (Fix Auto in Coda)
         # ---------------------------------------------------------
         vehicle_state, vehicle, vehicle_distance = self.collision_and_car_avoid_manager(ego_vehicle_wp)
 
@@ -367,37 +376,45 @@ class BehaviorAgent(BasicAgent):
                 print(f"[BICICLETTA] Ciclista davanti a noi a {real_distance:.1f}m. Scarto laterale forzato.")
                 sys.stdout.flush()
                 
-                # Applica offset laterale (come faceva il codice del tuo collega, ma con un minimo forzato)
-                offset_value = -(1.0 * vehicle.bounding_box.extent.y + self._vehicle.bounding_box.extent.y)
+                offset_value = -(0.5 * vehicle.bounding_box.extent.y + self._vehicle.bounding_box.extent.y)
                 if offset_value > -1.5:
                     offset_value = -1.5
                     
                 self._local_planner.set_lateral_offset(offset_value)
                 
-                # Manteniamo una velocità decisa per compiere lo scarto senza bloccarci in frenata dietro la bici
                 target_speed = min([self._behavior.max_speed, self._speed_limit - self._behavior.speed_lim_dist])
                 self._local_planner.set_speed(target_speed)
                 return self._local_planner.run_step(debug=debug)
-            
-            # SCENARIO AUTO PARCHEGGIATA
-            elif vehicle_wp.lane_id == ego_vehicle_wp.lane_id and parked and not ego_vehicle_wp.is_junction:               
-                print("[AUTO] Veicolo parcheggiato a lato. Tento il sorpasso.")
+
+            # SCENARIO EMERGENZA PRIORITARIO (Controlla questo PRIMA di provare sorpassi!)
+            elif real_distance < self._behavior.braking_distance:
+                print(f"[AUTO] Veicolo troppo vicino ({real_distance:.1f}m)! Freno d'emergenza.")
                 sys.stdout.flush()
+                return self.emergency_stop()
+            
+            # SCENARIO AUTO PARCHEGGIATA O IN CODA (Se siamo a distanza di sicurezza)
+            elif vehicle_wp.lane_id == ego_vehicle_wp.lane_id and parked and not ego_vehicle_wp.is_junction:               
+                print(f"[AUTO] Veicolo in coda/parcheggiato a {real_distance:.1f}m. Tento il sorpasso.")
+                sys.stdout.flush()
+                
                 if len(current_plan) > 0:
                     overtake_path = self._overtake_manager.get_overtake_path(ego_vehicle_wp, real_distance, current_plan[-1][0].transform.location)
                     if overtake_path:
+                        print("[AUTO] Percorso libero! Inizio sorpasso.")
+                        sys.stdout.flush()
                         self._local_planner.set_global_plan(overtake_path, clean_queue=True)
                         self._overtake_manager.in_overtake = True
                         self._local_planner.set_speed(25.0)
                         return self._local_planner.run_step(debug=debug)
+                
+                # Se NON ci sono le condizioni per superare la macchina, passiamo il veicolo al car_following_manager
+                # Il controller rallenterà dolcemente l'auto fino a 0 km/h mettendola in coda in totale sicurezza!
                 if not self._overtake_manager.in_overtake:
-                    return self.emergency_stop()
+                    print("[AUTO] Impossibile sorpassare. Rallento per accodarmi.")
+                    sys.stdout.flush()
+                    return self.car_following_manager(vehicle, real_distance, debug=debug)
             
             # SCENARIO AUTO IN MOVIMENTO
-            elif real_distance < self._behavior.braking_distance:
-                print(f"[AUTO] Veicolo troppo vicino ({real_distance:.1f}m)! Freno.")
-                sys.stdout.flush()
-                return self.emergency_stop()
             else:
                 return self.car_following_manager(vehicle, real_distance, debug=debug)
 
