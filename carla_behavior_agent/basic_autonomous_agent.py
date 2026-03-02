@@ -106,9 +106,8 @@ class MyTeamAgent(AutonomousAgent):
                 "throttle":controls.throttle, 
                 "brake": controls.brake,
                 })
-
             if len(self.configs["SaveSpeedData"]) > 0:
-                with open(self.configs["SaveSpeedData"],"a") as fp:
+                with open(os.path.join(os.getcwd(), self.configs["SaveSpeedData"]), "a") as fp:
                     fp.write(str(timestamp)+";"+str(input_data["Speed"][1]["speed"] * 3.6)+";"+str(self.configs["target_speed"])+"\n")
                     fp.close()
                     

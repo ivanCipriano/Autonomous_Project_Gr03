@@ -12,22 +12,6 @@ import math
 import numpy as np
 import carla
 
-def draw_waypoints(world, waypoints, z=0.5):
-    """
-    Draw a list of waypoints at a certain height given in z.
-
-        :param world: carla.world object
-        :param waypoints: list or iterable container with the waypoints to draw
-        :param z: height in meters
-    """
-    for wpt in waypoints:
-        wpt_t = wpt.transform
-        begin = wpt_t.location + carla.Location(z=z)
-        angle = math.radians(wpt_t.rotation.yaw)
-        end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
-        world.debug.draw_arrow(begin, end, arrow_size=0.3, life_time=1.0)
-
-
 def get_speed(vehicle):
     """
     Compute speed of a vehicle in Km/h.
@@ -38,6 +22,17 @@ def get_speed(vehicle):
     vel = vehicle.get_velocity()
 
     return 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+
+def get_acceleration(vehicle):
+    """
+    Compute acceleration of a vehicle in m/s^2 (km/h^2 = 0.27 m/s^2)
+
+        :param vehicle: the vehicle for which acceleration is calculated
+        :return: acceleration as a float in m/s^2
+    """
+    acc = vehicle.get_acceleration()
+
+    return math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2)
 
 def get_trafficlight_trigger_location(traffic_light):
     """
@@ -67,7 +62,7 @@ def is_within_distance(target_transform, reference_transform, max_distance, angl
     """
     Check if a location is both within a certain distance from a reference object.
     By using 'angle_interval', the angle between the location and reference transform
-    will also be tkaen into account, being 0 a location in front and 180, one behind.
+    will also be taken into account, being 0 a location in front and 180, one behind.
 
     :param target_transform: location of the target object
     :param reference_transform: location of the reference object
@@ -102,7 +97,6 @@ def is_within_distance(target_transform, reference_transform, max_distance, angl
 
     return min_angle < angle < max_angle
 
-
 def compute_magnitude_angle(target_location, current_location, orientation):
     """
     Compute relative angle and distance between a target_location and a current_location
@@ -120,7 +114,6 @@ def compute_magnitude_angle(target_location, current_location, orientation):
 
     return (norm_target, d_angle)
 
-
 def distance_vehicle(waypoint, vehicle_transform):
     """
     Returns the 2D distance from a waypoint to a vehicle
@@ -133,7 +126,6 @@ def distance_vehicle(waypoint, vehicle_transform):
     y = waypoint.transform.location.y - loc.y
 
     return math.sqrt(x * x + y * y)
-
 
 def vector(location_1, location_2):
     """
@@ -148,7 +140,6 @@ def vector(location_1, location_2):
 
     return [x / norm, y / norm, z / norm]
 
-
 def compute_distance(location_1, location_2):
     """
     Euclidean distance between 3D points
@@ -161,7 +152,6 @@ def compute_distance(location_1, location_2):
     norm = np.linalg.norm([x, y, z]) + np.finfo(float).eps
     return norm
 
-
 def positive(num):
     """
     Return the given number if positive, else 0
@@ -170,15 +160,96 @@ def positive(num):
     """
     return num if num > 0.0 else 0.0
 
-def is_a_bicycle(type_id):
-    """
-    Verifica se un veicolo è una bicicletta analizzando il suo type_id.
-    In CARLA i modelli di bici includono 'crossbike', 'omafiets', 'century', ecc.
-    """
-    keywords = ['bicycle', 'crossbike', 'omafiets', 'century']
-    return any(keyword in type_id for keyword in keywords)
+def is_a_bicycle(vehicle_name):
+    BICYCLES = ['vehicle.bh.crossbike','vehicle.diamondback.century', 'vehicle.gazelle.omafiets']
+    return vehicle_name in BICYCLES
 
-def is_road_straight(ego_yaw : float, vehicle_yaw : float, tolerance : int = 10) -> bool:
+def is_an_obstacle(obs_name):
+    OBSTACLES = ['static.prop.streetbarrier', 'static.prop.constructioncone', 'static.prop.trafficcone01', 'static.prop.trafficcone02', 'static.prop.warningconstruction', 'static.prop.trafficwarning', 'static.prop.warningaccident']
+    return obs_name in OBSTACLES
+
+def get_stop_distance(vehicle):
+    """
+    Calculate the distance needed to stop a vehicle given its current speed.
+
+        :param vehicle: The vehicle for which the stopping distance is calculated.
+        
+        :return: The stopping distance in meters as a float.
+    """
+    current_speed_kmh = get_speed(vehicle)                  # Current speed in Km/h
+    current_speed_ms = current_speed_kmh / 3.6              # Conversion from Km/h to m/s
+    deceleration = 8                                        # Average deceleration in m/s²
+
+    # Calculate the stopping distance using the formula: stopping_distance = (current_speed ** 2) / (2 * deceleration)
+    stopping_distance = (current_speed_ms ** 2) / (2 * deceleration)
+    return stopping_distance
+
+def compute_distance_from_center(actor1, actor2 = None, distance = 5):
+    """
+    Compute the distance between the center of two actors. 
+    NOTE: We use the bounding boxes to calculate the actual distance.
+    
+        :param actor1: first actor (carla.Actor)
+        :param actor2: second actor (carla.Actor)
+        :param distance: distance between the two actors (float)
+        
+        :return: distance between the center of the two actors (float)
+    """
+    actor1_extent = max(actor1.bounding_box.extent.x, actor1.bounding_box.extent.y)
+    actor2_extent = max(actor2.bounding_box.extent.x, actor2.bounding_box.extent.y) if actor2 else 0
+    return distance - actor1_extent - actor2_extent
+
+def dist(a, b):
+        """
+        Calculate the distance between two objects: a and b. These two objects can be of type carla.Vehicle, carla.Waypoint, or carla.Location.
+
+        :param a: first object (carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location)
+        :param b: second object (carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location)
+
+        :return: distance between the two objects (float)
+        """
+        # Check if input 'a' is of type carla.Landmark and convert it to a carla.Waypoint object.
+        if isinstance(a, carla.Landmark):
+            a = a.waypoint
+        # Check if input 'b' is of type carla.Landmark and convert it to a carla.Waypoint object.
+        if isinstance(b, carla.Landmark):
+            b = b.waypoint
+            
+        # Check if input 'a' is of type carla.Transform and convert it to a carla.Location object.
+        if isinstance(a, carla.Transform):
+            a = a.location
+        # Check if input 'b' is of type carla.Transform and convert it to a carla.Location object.
+        if isinstance(b, carla.Transform):
+            b = b.location
+
+        # Check if both input objects are of type carla.Actor.
+        if isinstance(a, carla.Actor) and isinstance(b, carla.Actor):
+            return a.get_location().distance(b.get_location())
+        # Check if input 'a' is of type carla.Actor and input 'b' is of type carla.Waypoint.
+        elif isinstance(a, carla.Actor) and isinstance(b, carla.Waypoint):
+            return a.get_location().distance(b.transform.location)
+        # Check if input 'a' is of type carla.Waypoint and input 'b' is of type carla.Actor.
+        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Actor):
+            return a.transform.location.distance(b.get_location())
+        # Check if both input objects are of type carla.Waypoint.
+        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Waypoint):
+            return a.transform.location.distance(b.transform.location)
+        # Check if input 'a' is of type carla.Location and input 'b' is of type carla.Location.
+        elif isinstance(a, carla.Actor) and isinstance(b, carla.Location):
+            return a.get_location().distance(b)
+        elif isinstance(a, carla.Location) and isinstance(b, carla.Actor):
+            return a.distance(b.get_location())
+        elif isinstance(a, carla.Location) and isinstance(b, carla.Waypoint):
+            return a.distance(b.transform.location)
+        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Location):
+            return a.transform.location.distance(b)
+        elif isinstance(a, carla.Location) and isinstance(b, carla.Location):
+            return a.distance(b)
+        # If none of the above conditions are met, raise a ValueError.
+        else:
+            raise ValueError("Invalid input types. Please provide either carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location objects.")
+        
+def is_road_straight(ego_yaw, vehicle_yaw, tolerance = 10):
     """
     This function checks if the road is straight. In particular, it checks if the yaw of the ego vehicle 
     and the vehicle in front are similar.
@@ -191,7 +262,7 @@ def is_road_straight(ego_yaw : float, vehicle_yaw : float, tolerance : int = 10)
     """
     return abs(ego_yaw - vehicle_yaw) < tolerance
 
-def is_bicycle_near_center(vehicle_location : carla.Location, ego_vehicle_wp : carla.Waypoint) -> bool:
+def is_bicycle_near_center(vehicle_location, ego_vehicle_wp):
     """
     This function checks if the bicycle is near the center of the lane.
     

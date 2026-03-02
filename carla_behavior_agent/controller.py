@@ -14,7 +14,6 @@ import sys
 
 from math import atan2, atan, hypot
 
-
 class VehicleController():
     """
     VehicleController is the combination of longitudinal PID controller
@@ -261,7 +260,7 @@ class StanleyLateralController():
         # Trajectory Distance
         dd=hypot(desired_heading_x, desired_heading_y)
                         
-        # Crosstrack error - MODIFICA CRUCIALE: AGGIUNTA DI self._offset
+        # Crosstrack error
         lateral_error = \
               ((observed_x-desired_x)*desired_heading_y -
               (observed_y-desired_y)*desired_heading_x) / (dd + sys.float_info.epsilon) + self._offset
@@ -280,6 +279,10 @@ class StanleyLateralController():
                 
         steering += atan(self._kv * lateral_error /
                                (self._ks + speed_estimate))
+        
+        # print("Current Heading: ", observed_heading, " - Desired Heading: ", desired_heading)
+        # print("Heading error: ", steering_error, "Crosstrack error: ", lateral_error)
+        # print("Output: ", steering)
         
         return np.clip(steering, -1.0, 1.0)
 
@@ -403,11 +406,3 @@ class PIDLateralController():
         self._k_i = K_I
         self._k_d = K_D
         self._dt = dt
-        
-    @property
-    def offset(self):
-        return self._offset
-    
-    @offset.setter
-    def offset(self, offset):
-        self._offset = offset

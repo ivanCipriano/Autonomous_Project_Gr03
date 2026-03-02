@@ -14,6 +14,30 @@ def threaded(func):
         return thread
     return wrapper
 
+# import logging
+
+# def configure_logger(logger_name='my_logger', level=logging.INFO):
+#     """
+#     Configures the logger with colors for different log levels.
+    
+#     :param logger_name: Name of the logger.
+#     :param level: Logging level.
+#     :return: A configured logger.
+#     """
+#     # Create the logger
+#     logger = logging.getLogger(logger_name)
+#     logger.setLevel(level)
+
+#     # Create console handler
+#     console_handler = logging.StreamHandler()
+#     console_handler.setLevel(level)
+
+#     # Add the handler to the logger
+#     if not logger.hasHandlers():
+#         logger.addHandler(console_handler)
+
+#     return logger
+
 class Plot():
     def __init__(self, filename, plotname) -> None:
         self.filename = filename
