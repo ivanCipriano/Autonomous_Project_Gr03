@@ -383,45 +383,7 @@ class BehaviorAgent(BasicAgent):
                 print(f"[AUTO] Veicolo troppo vicino ({real_distance:.1f}m)! Freno d'emergenza.")
                 sys.stdout.flush()
                 return self.emergency_stop()
-            
-            # SCENARIO AUTO PARCHEGGIATA O IN CODA (Accodamento proporzionale puro)
-            elif vehicle_wp.lane_id == ego_vehicle_wp.lane_id and parked and not ego_vehicle_wp.is_junction:    
-                print(f"[AUTO] Veicolo in coda/parcheggiato a {real_distance:.1f}m. Tento il sorpasso.")
-                sys.stdout.flush()
-                           
-                if len(current_plan) > 0:
-                    overtake_path = self._overtake_manager.get_overtake_path(ego_vehicle_wp, real_distance, current_plan[-1][0].transform.location)
-                    if overtake_path:
-                        print(f"[AUTO] Percorso libero! Inizio sorpasso del veicolo a {real_distance:.1f}m.")
-                        sys.stdout.flush()
-                        self._local_planner.set_global_plan(overtake_path, clean_queue=True)
-                        self._overtake_manager.in_overtake = True
-                        self._local_planner.set_speed(25.0)
-                        return self._local_planner.run_step(debug=debug)
-                
-                if not self._overtake_manager.in_overtake:
-                    # FIX: Accodamento proporzionale robusto ignorando il TTC fallace per veicoli fermi
-                    safe_stop_distance = self._behavior.braking_distance + 1.5 
-                    
-                    if real_distance <= safe_stop_distance:
-                        print("[AUTO] Distanza di accodamento raggiunta. Auto in sosta stabile.")
-                        sys.stdout.flush()
-                        return self.emergency_stop()
-                    else:
-                        # Rallenta proporzionalmente in modo morbido negli ultimi 20 metri
-                        approach_speed = (real_distance - safe_stop_distance)
-                        target_speed = max(0.0, min(15.0, approach_speed))
-                        
-                        # Garantiamo una minima scorrevolezza per non fermarci prematuramente a metà
-                        if target_speed < 5.0 and real_distance > safe_stop_distance + 1.0:
-                            target_speed = 5.0
-                            
-                        print(f"[AUTO] Impossibile sorpassare. Rallento per accodarmi a {target_speed:.1f} km/h (Dist: {real_distance:.1f}m)")
-                        sys.stdout.flush()
-                        
-                        self._local_planner.set_speed(target_speed)
-                        return self._local_planner.run_step(debug=debug)
-            
+
             # SCENARIO AUTO IN MOVIMENTO
             else:
                 return self.car_following_manager(vehicle, real_distance, debug=debug)
