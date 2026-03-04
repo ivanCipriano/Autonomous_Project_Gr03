@@ -1,7 +1,7 @@
 # cognitive_modules/base_evaluator.py
 import carla
 import numpy as np
-from misc import is_within_distance, is_a_bicycle, dist, get_speed, positive
+from misc import is_within_distance, get_distance, get_speed
 from local_planner import RoadOption
 
 
@@ -29,7 +29,7 @@ class BaseEvaluator:
         ttc = distance / delta_v if delta_v != 0 else distance / np.nextafter(0., 1.)
 
         if sys._behavior.safety_time > ttc > 0.0:
-            target_speed = min([positive(vehicle_speed - sys._behavior.speed_decrease), sys._behavior.max_speed,
+            target_speed = min([self.positive(vehicle_speed - sys._behavior.speed_decrease), sys._behavior.max_speed,
                                 sys._speed_limit - sys._behavior.speed_lim_dist])
         elif 2 * sys._behavior.safety_time > ttc >= sys._behavior.safety_time:
             target_speed = min([max(sys._min_speed, vehicle_speed), sys._behavior.max_speed,
@@ -79,17 +79,17 @@ class BaseEvaluator:
         """Ex collision_and_car_avoid_manager: Rileva veicoli e bici nei dintorni."""
         sys = self.core_system
         v_list = sys._world.get_actors().filter("*vehicle*")
-        v_list = [v for v in v_list if dist(v, waypoint) < 13 and v.id != sys._vehicle.id]
+        v_list = [v for v in v_list if get_distance(v, waypoint) < 13 and v.id != sys._vehicle.id]
 
         if not v_list:
             return False, None, -1
 
         bicycle_list = [b for b in v_list if
-                        is_a_bicycle(b.type_id) and is_within_distance(b.get_transform(), sys._vehicle.get_transform(),
+                        self.is_a_bicycle(b.type_id) and is_within_distance(b.get_transform(), sys._vehicle.get_transform(),
                                                                        10, angle_interval=[0, 90])]
         if len(bicycle_list) == 1:
             print('[Cognition] -> Cyclist track intercepted.')
-            return True, bicycle_list[0], dist(bicycle_list[0], waypoint)
+            return True, bicycle_list[0], get_distance(bicycle_list[0], waypoint)
 
         speed_limit = sys._vehicle.get_speed_limit()
 
@@ -118,3 +118,15 @@ class BaseEvaluator:
                 self._process_tailgating(waypoint, v_list)
 
         return v_state, v_obj, v_dist
+
+    def is_a_bicycle(self,vehicle_name):
+        BICYCLES = ['vehicle.bh.crossbike', 'vehicle.diamondback.century', 'vehicle.gazelle.omafiets']
+        return vehicle_name in BICYCLES
+
+    def positive(self,num):
+        """
+        Return the given number if positive, else 0
+
+            :param num: value to check
+        """
+        return num if num > 0.0 else 0.0

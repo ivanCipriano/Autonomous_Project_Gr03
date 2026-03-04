@@ -6,7 +6,7 @@ from enum import IntEnum
 from typing import List
 
 from basic_agent import BasicAgent
-from misc import dist, get_speed
+from misc import get_distance, get_speed
 from local_planner import RoadOption
 
 
@@ -208,8 +208,8 @@ class IntersectionNavigationEngine(BasicAgent):
     def _classify_topology(self, vehicle_wp, intersection):
         wps_in_junction = intersection.get_waypoints(carla.LaneType.Driving)
         outgoing_wps = []
-        outgoing_wps.extend([wp2 for wp1, wp2 in wps_in_junction if dist(wp1, vehicle_wp) < 3])
-        outgoing_wps.extend([wp1 for wp1, wp2 in wps_in_junction if dist(wp2, vehicle_wp) < 3])
+        outgoing_wps.extend([wp2 for wp1, wp2 in wps_in_junction if get_distance(wp1, vehicle_wp) < 3])
+        outgoing_wps.extend([wp1 for wp1, wp2 in wps_in_junction if get_distance(wp2, vehicle_wp) < 3])
         pivot = carla.Transform(intersection.bounding_box.location, vehicle_wp.transform.rotation)
         oriented = self._categorize_spatial_nodes(pivot, outgoing_wps)
 

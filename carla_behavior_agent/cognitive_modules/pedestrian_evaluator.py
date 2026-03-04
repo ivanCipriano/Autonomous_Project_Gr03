@@ -1,6 +1,6 @@
 # cognitive_modules/pedestrian_evaluator.py
 from .base_evaluator import BaseEvaluator
-from misc import compute_distance_from_center, is_within_distance, dist
+from misc import compute_distance_from_center, is_within_distance, get_distance
 from local_planner import RoadOption
 
 
@@ -28,7 +28,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
         v_speed_limit = sys._vehicle.get_speed_limit()
 
         if current_waypoint.is_junction:
-            return True, biped_list[0], dist(biped_list[0], current_waypoint)
+            return True, biped_list[0], get_distance(biped_list[0], current_waypoint)
 
         elif sys._direction == RoadOption.CHANGELANELEFT:
             return sys._vehicle_obstacle_detected(biped_list,

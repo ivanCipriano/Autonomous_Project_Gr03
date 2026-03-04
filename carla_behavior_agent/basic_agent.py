@@ -725,16 +725,16 @@ class BasicAgent(object):
         if isinstance(reference, carla.Actor):
             vehicle_list = [
                 v for v in vehicle_list
-                if v.id != reference.id and 0.1 < dist(v, reference) < max_distance
+                if v.id != reference.id and 0.1 < get_distance(v, reference) < max_distance
             ]
         else:
             vehicle_list = [
                 v for v in vehicle_list
-                if 0.1 < dist(v, reference) < max_distance
+                if 0.1 < get_distance(v, reference) < max_distance
             ]
 
         # Sort the vehicles by distance to the ego vehicle
-        vehicle_list.sort(key=lambda v: dist(v, reference))
+        vehicle_list.sort(key=lambda v: get_distance(v, reference))
         return vehicle_list
 
     def _parked_vehicle(self, vehicle):

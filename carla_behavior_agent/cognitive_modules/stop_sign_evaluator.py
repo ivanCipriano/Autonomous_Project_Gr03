@@ -1,13 +1,13 @@
 # cognitive_modules/stop_sign_evaluator.py
 from .base_evaluator import BaseEvaluator
-from misc import compute_distance_from_center, dist
+from misc import compute_distance_from_center, get_distance
 
 
 class MandatoryStopEvaluator(BaseEvaluator):
     def _detect_stop_regulation(self, vehicle, sign_distance=20):
         sys = self.core_system
         is_affected, signal_obj = sys._affected_by_sign(vehicle=vehicle, sign_type="206", max_distance=sign_distance)
-        distance = -1 if not is_affected else dist(a=vehicle, b=signal_obj)
+        distance = -1 if not is_affected else get_distance(a=vehicle, b=signal_obj)
         return is_affected, signal_obj, distance
 
     def evaluate(self, **kwargs):
@@ -33,7 +33,7 @@ class MandatoryStopEvaluator(BaseEvaluator):
             elif v_state and actual_dist > 5:
                 print("--- [Cognition] Stop distant. Switching to adaptive cruise for lead vehicle.")
                 follow_dist = compute_distance_from_center(actor1=sys._vehicle, actor2=lead_v,
-                                                           distance=dist(sys._vehicle, lead_v))
+                                                           distance=get_distance(sys._vehicle, lead_v))
                 return self.adaptive_cruise_control(target_vehicle=lead_v, distance=follow_dist)
             else:
                 print("--- [Cognition] Stop distant. Decelerating to approach velocity.")

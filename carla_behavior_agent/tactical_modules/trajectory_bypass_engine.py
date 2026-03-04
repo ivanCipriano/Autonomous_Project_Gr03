@@ -2,7 +2,7 @@
 import carla
 import math
 from basic_agent import BasicAgent
-from misc import dist, is_within_distance, compute_distance_from_center, get_speed
+from misc import get_distance, is_within_distance, compute_distance_from_center, get_speed
 
 
 class TrajectoryBypassEngine(BasicAgent):
@@ -94,7 +94,7 @@ class TrajectoryBypassEngine(BasicAgent):
 
         filtered_list = [
             v for v in vehicle_list
-            if v.id != actor.id and v.id != self._vehicle.id and dist(v, actor) < max_distance
+            if v.id != actor.id and v.id != self._vehicle.id and get_distance(v, actor) < max_distance
                and self._map.get_waypoint(v.get_location()).lane_id == target_lane_id
         ]
 
@@ -106,7 +106,7 @@ class TrajectoryBypassEngine(BasicAgent):
                                   reference_transform=previous_vehicle.get_transform(), max_distance=max_distance,
                                   angle_interval=[0, 60]):
                 v_distance = compute_distance_from_center(actor1=previous_vehicle, actor2=v,
-                                                          distance=dist(v, previous_vehicle))
+                                                          distance=get_distance(v, previous_vehicle))
             else:
                 continue
             distance_other_lane += v.bounding_box.extent.x + v_distance

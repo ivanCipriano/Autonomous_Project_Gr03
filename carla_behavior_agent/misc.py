@@ -97,36 +97,6 @@ def is_within_distance(target_transform, reference_transform, max_distance, angl
 
     return min_angle < angle < max_angle
 
-def compute_magnitude_angle(target_location, current_location, orientation):
-    """
-    Compute relative angle and distance between a target_location and a current_location
-
-        :param target_location: location of the target object
-        :param current_location: location of the reference object
-        :param orientation: orientation of the reference object
-        :return: a tuple composed by the distance to the object and the angle between both objects
-    """
-    target_vector = np.array([target_location.x - current_location.x, target_location.y - current_location.y])
-    norm_target = np.linalg.norm(target_vector)
-
-    forward_vector = np.array([math.cos(math.radians(orientation)), math.sin(math.radians(orientation))])
-    d_angle = math.degrees(math.acos(np.clip(np.dot(forward_vector, target_vector) / norm_target, -1., 1.)))
-
-    return (norm_target, d_angle)
-
-def distance_vehicle(waypoint, vehicle_transform):
-    """
-    Returns the 2D distance from a waypoint to a vehicle
-
-        :param waypoint: actual waypoint
-        :param vehicle_transform: transform of the target vehicle
-    """
-    loc = vehicle_transform.location
-    x = waypoint.transform.location.x - loc.x
-    y = waypoint.transform.location.y - loc.y
-
-    return math.sqrt(x * x + y * y)
-
 def vector(location_1, location_2):
     """
     Returns the unit vector from location_1 to location_2
@@ -152,38 +122,6 @@ def compute_distance(location_1, location_2):
     norm = np.linalg.norm([x, y, z]) + np.finfo(float).eps
     return norm
 
-def positive(num):
-    """
-    Return the given number if positive, else 0
-
-        :param num: value to check
-    """
-    return num if num > 0.0 else 0.0
-
-def is_a_bicycle(vehicle_name):
-    BICYCLES = ['vehicle.bh.crossbike','vehicle.diamondback.century', 'vehicle.gazelle.omafiets']
-    return vehicle_name in BICYCLES
-
-def is_an_obstacle(obs_name):
-    OBSTACLES = ['static.prop.streetbarrier', 'static.prop.constructioncone', 'static.prop.trafficcone01', 'static.prop.trafficcone02', 'static.prop.warningconstruction', 'static.prop.trafficwarning', 'static.prop.warningaccident']
-    return obs_name in OBSTACLES
-
-def get_stop_distance(vehicle):
-    """
-    Calculate the distance needed to stop a vehicle given its current speed.
-
-        :param vehicle: The vehicle for which the stopping distance is calculated.
-        
-        :return: The stopping distance in meters as a float.
-    """
-    current_speed_kmh = get_speed(vehicle)                  # Current speed in Km/h
-    current_speed_ms = current_speed_kmh / 3.6              # Conversion from Km/h to m/s
-    deceleration = 8                                        # Average deceleration in m/s²
-
-    # Calculate the stopping distance using the formula: stopping_distance = (current_speed ** 2) / (2 * deceleration)
-    stopping_distance = (current_speed_ms ** 2) / (2 * deceleration)
-    return stopping_distance
-
 def compute_distance_from_center(actor1, actor2 = None, distance = 5):
     """
     Compute the distance between the center of two actors. 
@@ -199,7 +137,7 @@ def compute_distance_from_center(actor1, actor2 = None, distance = 5):
     actor2_extent = max(actor2.bounding_box.extent.x, actor2.bounding_box.extent.y) if actor2 else 0
     return distance - actor1_extent - actor2_extent
 
-def dist(a, b):
+def get_distance(a, b):
         """
         Calculate the distance between two objects: a and b. These two objects can be of type carla.Vehicle, carla.Waypoint, or carla.Location.
 
@@ -248,30 +186,3 @@ def dist(a, b):
         # If none of the above conditions are met, raise a ValueError.
         else:
             raise ValueError("Invalid input types. Please provide either carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location objects.")
-        
-def is_road_straight(ego_yaw, vehicle_yaw, tolerance = 10):
-    """
-    This function checks if the road is straight. In particular, it checks if the yaw of the ego vehicle 
-    and the vehicle in front are similar.
-    
-        :param ego_yaw (float): yaw of the ego vehicle.
-        :param vehicle_yaw (float): yaw of the vehicle in front.
-        :param tolerance (int): tolerance value to check if the road is straight.
-        
-        :return (bool): True if the road is straight, False otherwise.
-    """
-    return abs(ego_yaw - vehicle_yaw) < tolerance
-
-def is_bicycle_near_center(vehicle_location, ego_vehicle_wp):
-    """
-    This function checks if the bicycle is near the center of the lane.
-    
-        :param vehicle_location (carla.Location): location of the vehicle.
-        :param ego_vehicle_wp (carla.Waypoint): waypoint of the ego vehicle.
-        
-        :return (bool): True if the bicycle is near the center of the lane, False otherwise.
-    """
-    lane_center_offset = 0.3                   # How close to the center the bicycle needs to be considered in the center
-    vehicle_y = vehicle_location.y
-    lane_center_y = ego_vehicle_wp.transform.location.y
-    return abs(vehicle_y - lane_center_y) < lane_center_offset

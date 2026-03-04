@@ -1,6 +1,6 @@
 # cognitive_modules/obstacle_evaluator.py
 from .base_evaluator import BaseEvaluator
-from misc import compute_distance_from_center, is_within_distance, dist
+from misc import compute_distance_from_center, is_within_distance, get_distance
 
 
 class StaticObstructionEvaluator(BaseEvaluator):
@@ -16,10 +16,10 @@ class StaticObstructionEvaluator(BaseEvaluator):
         if not obs_list:
             return False, None, -1
 
-        obs_list = sorted(obs_list, key=lambda x: dist(x, current_waypoint))
+        obs_list = sorted(obs_list, key=lambda x: get_distance(x, current_waypoint))
 
         if "constructioncone" in element_query:
-            return True, obs_list[0], dist(obs_list[0], current_waypoint)
+            return True, obs_list[0], get_distance(obs_list[0], current_waypoint)
 
         return sys._vehicle_obstacle_detected(
             obs_list, max(sys._behavior.min_proximity_threshold, sys._speed_limit / 2), up_angle_th=60
