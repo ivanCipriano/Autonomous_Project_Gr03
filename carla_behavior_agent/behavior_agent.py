@@ -21,49 +21,48 @@ from cognitive_modules.obstacle_evaluator import StaticObstructionEvaluator
 from cognitive_modules.stop_sign_evaluator import StopEvaluator
 from cognitive_modules.fleet_evaluator import FleetProximityEvaluator
 from cognitive_modules.cruise_evaluator import NavigationCruiseEvaluator
-
 from misc import *
-# from utils import configure_logger
-
-# logger = configure_logger()
 
 class BehaviorAgent(BasicAgent):
     """
-    BehaviorAgent implements an agent that navigates scenes to reach a given
-    target destination, by computing the shortest possible path to it.
-    This agent can correctly follow traffic signs, speed limitations,
-    traffic lights, while also taking into account nearby vehicles. Lane changing
-    decisions can be taken by analyzing the surrounding environment such as tailgating avoidance.
-    Adding to these are possible behaviors, the agent can also keep safety distance
-    from a car in front of it by tracking the instantaneous time to collision
-    and keeping it in a certain range. Finally, different sets of behaviors
-    are encoded in the agent, from cautious to a more aggressive ones.
+    Agente autonomo avanzato per la navigazione e il raggiungimento di una destinazione.
+    Integra un'architettura decisionale basata su una "Chain of Responsibility" (catena di valutatori cognitivi)
+    e su motori tattici per la gestione di incroci e manovre di elusione/sorpasso.
+    Supporta profili comportamentali dinamici (Cauto, Normale, Aggressivo) e adatta la guida
+    alle condizioni meteorologiche e ai limiti di velocità.
     """
 
     def __init__(self, vehicle, behavior='cautious', opt_dict={}, map_inst=None, grp_inst=None):
         """
-        Constructor method.
+        Inizializza l'agente comportamentale, configurando i parametri di base, il profilo di guida
+        e i vari moduli cognitivi e tattici necessari per l'analisi dell'ambiente.
 
-            :param vehicle: actor to apply to local planner logic onto
-            :param behavior: type of agent to apply
+        Args:
+            vehicle (carla.Vehicle): L'attore veicolo da controllare nel simulatore.
+            behavior (str, opzionale): Il tipo di comportamento da adottare ('cautious', 'normal', 'aggressive'). Default a 'cautious'.
+            opt_dict (dict, opzionale): Dizionario per configurazioni aggiuntive dell'agente. Default a {}.
+            map_inst (carla.Map, opzionale): L'istanza della mappa per le interrogazioni spaziali. Default a None.
+            grp_inst (GlobalRoutePlanner, opzionale): Il pianificatore di rotte globali. Default a None.
+
+        Returns:
+            None
         """
 
         super().__init__(vehicle, opt_dict=opt_dict, map_inst=map_inst, grp_inst=grp_inst)
 
-        # Vehicle information
-        self._approach_speed = 10.0                                 # Approach speed of the agent
+        self._approach_speed = 10.0
         self._behavior = \
             Aggressive() if behavior == 'aggressive' else \
             Normal() if behavior == 'normal' else \
             Cautious()            
-        self._direction = None                                      # Current direction of the agent
-        self._incoming_direction = None                             # Incoming direction of the agent
-        self._incoming_waypoint = None                              # Incoming waypoint of the agent
-        self._look_ahead_steps = 0                                  # Number of steps to look ahead
-        self._min_speed = 5                                         # Minimum speed of the agent
-        self._speed = 0                                             # Current speed of the agent
-        self._speed_limit = 0                                       # Speed limit of the agent
-        self._stuck = False                                         # Flag indicating if the agent is stuck
+        self._direction = None
+        self._incoming_direction = None
+        self._incoming_waypoint = None
+        self._look_ahead_steps = 0
+        self._min_speed = 5
+        self._speed = 0
+        self._speed_limit = 0
+        self._stuck = False
 
         self._bypass_engine = TrajectoryBypassEngine(self._vehicle, opt_dict)
         self._evaluators_chain = [
@@ -77,22 +76,30 @@ class BehaviorAgent(BasicAgent):
 
         self._bypass_engine = TrajectoryBypassEngine(self._vehicle, opt_dict)
         self._navigation_engine = IntersectionNavigationEngine(self._vehicle, opt_dict)
-        
-        # Parameters for agent behavior
+
         self._behavior = Cautious() if behavior == 'cautious' else Aggressive() if behavior == 'aggressive' else Normal()
         self._is_raining = False
 
     def run_step(self, debug=False):
-        """Metodo di ciclo principale riprogettato ad architettura modulare"""
+        """
+        Ciclo di esecuzione principale dell'agente.
+        Aggiorna le informazioni di contesto e interroga sequenzialmente la catena dei valutatori
+        cognitivi. Ritorna l'azione (comando di controllo) stabilita dal primo valutatore che rileva
+        una condizione critica o dalla navigazione di crociera di default.
+
+        Args:
+            debug (bool, opzionale): Flag per l'attivazione della stampa di log di debug. Default a False.
+
+        Returns:
+            carla.VehicleControl: Il comando di controllo generato (acceleratore, freno, sterzo, ecc.).
+        """
         self.__update_information(debug=debug)
 
-        # Data-wrapper minimale per i moduli decisionali
         environment_context = {
             'ego_vehicle_wp': self._map.get_waypoint(self._vehicle.get_location()),
             'debug': debug
         }
 
-        # Motore cognitivo: attraversa la Chain of Responsibility
         for evaluator in self._evaluators_chain:
             action = evaluator.evaluate(**environment_context)
             if action is not None:
@@ -103,12 +110,16 @@ class BehaviorAgent(BasicAgent):
 
     def __normal_behaviour(self, debug = False):
         """
-        This method is in charge of the normal behavior of the agent. In particular, it is in charge of setting the speed of the agent and
-        running the local planner.
-        
-            :param debug (bool): debug flag to print information.
+        Gestisce e applica il comportamento di guida standard (non in emergenza o in manovre speciali).
+        Calcola la velocità target in base al limite di velocità corrente e al profilo comportamentale,
+        delegando poi al pianificatore locale la generazione del comando.
+
+        Args:
+            debug (bool, opzionale): Flag per visualizzare i dati di debug sul pianificatore locale. Default a False.
+
+        Returns:
+            carla.VehicleControl: Il comando di guida per procedere normalmente.
         """
-        # Set the speed of the agent.
         target_speed = min(
             [self._behavior.max_speed, self._speed_limit - self._behavior.speed_lim_dist]
         )
@@ -118,22 +129,33 @@ class BehaviorAgent(BasicAgent):
     
     def __emergency_stop(self):
         """
-        Overwrites the throttle a brake values of a control to perform an emergency stop.
-        The steering is kept the same to avoid going out of the lane when stopping during turns
+        Genera un comando di controllo per l'arresto immediato di emergenza.
+        Azzera la propulsione e applica la frenata massima, mantenendo lo sterzo invariato per
+        evitare sbandamenti o uscite di corsia, specialmente in curva.
 
-            :param speed (carl.VehicleControl): control to be modified
+        Args:
+            Nessuno.
+
+        Returns:
+            carla.VehicleControl: Il comando configurato per la fermata di emergenza.
         """
-        # Get the vehicle control
         control = carla.VehicleControl()
-        # Set the throttle and brake values to 0.0 and self._max_brake, respectively.
         control.throttle = 0.0
         control.brake = self._max_brake
-        # Set the hand brake to False.
         control.hand_brake = False
         return control
     
     def __update_global_plan(self, overtake_path : list) -> None:
-        """Ex update_global_plan: Nasconde la logica di forzatura rotta locale"""
+        """
+        Aggiorna temporaneamente il piano di navigazione globale per forzare una rotta locale
+        specifica, come nel caso di una manovra di elusione o di un sorpasso.
+
+        Args:
+            overtake_path (list): Lista di carla.Waypoint che definiscono la traiettoria di sorpasso.
+
+        Returns:
+            None
+        """
         new_plan = self._local_planner.set_overtake_plan(
             overtake_plan=overtake_path,
             overtake_distance=self._bypass_engine.required_clearance
@@ -143,52 +165,49 @@ class BehaviorAgent(BasicAgent):
     
     def __update_information(self, debug = False):
         """
-        This method updates the information regarding the ego vehicle based on the surrounding world.
-        
-            :param debug (bool): debug flag to print information.
+        Aggiorna lo stato interno dell'agente raccogliendo i dati ambientali aggiornati.
+        Verifica le condizioni meteorologiche (es. pioggia per ridurre la velocità), aggiorna la velocità corrente
+        e i limiti, rileva le direzioni previste dai waypoint futuri e decrementa i contatori
+        temporali per le manovre tattiche e le soste agli incroci.
+
+        Args:
+            debug (bool, opzionale): Flag per abilitare le stampe di debug sul meteo e la telemetria. Default a False.
+
+        Returns:
+            None
         """
-        # Get the current weather of the simulation.
+
         self._weather = self._world.get_weather()
         precipitation_intensity = self._weather.precipitation
         preciptitation_deposits = self._weather.precipitation_deposits
         self._is_raining = precipitation_intensity > 50 or preciptitation_deposits > 55
-                         
-        # Update the speed of the agent.
+
         self._speed = get_speed(self._vehicle)
 
-        # Update the speed limit of the agent.
         self._speed_limit = self._vehicle.get_speed_limit() 
         self._speed_limit -= 5 if self._is_raining else 0
 
-        # Update the local planner speed.
         self._local_planner.set_speed(self._speed_limit)
 
-        # Update the direction of the agent.
         self._direction = self._local_planner.target_road_option if self._local_planner.target_road_option is not None else RoadOption.LANEFOLLOW
 
-        # Update the look ahead steps of the agent.
         self._look_ahead_steps = int(self._speed_limit / 10)
 
-        # Update the incoming waypoint and direction of the agent.
         self._incoming_waypoint, self._incoming_direction = self._local_planner.get_incoming_waypoint_and_direction(
             steps=self._look_ahead_steps
         )
 
-        # Update the incoming direction of the agent.
         if self._incoming_direction is None:
             self._incoming_direction = RoadOption.LANEFOLLOW
-            
-        # Update the behavior of the agent.
+
         if self._behavior.tailgate_counter > 0:
             self._behavior.tailgate_counter -= 1       
-
 
         if self._bypass_engine.evasion_lock > 0:
             self._bypass_engine.evasion_lock -= 1
         else:
             self._bypass_engine.is_bypassing = False
 
-        # Gestione dei frame di blocco per l'attraversamento incroci
         if self._navigation_engine.is_traversing and self._navigation_engine.active_traversal_frames <= 0:
             self._navigation_engine.is_traversing = False
             self._navigation_engine.active_traversal_frames = 0
