@@ -4,7 +4,36 @@ from misc import compute_distance_from_center, get_speed
 
 
 class FleetProximityEvaluator(BaseEvaluator):
+    """
+    Classe responsabile della valutazione di prossimità e delle interazioni con altri veicoli o elementi mobili nell'ambiente.
+
+    Eredita da BaseEvaluator e svolge un ruolo cruciale nel modulo di percezione e decisione del sistema di guida autonoma.
+    Il suo scopo principale è analizzare le entità circostanti per garantire la sicurezza della navigazione. Gestisce in
+    modo dinamico scenari di traffico complessi, valutando le distanze di sicurezza relative, pianificando manovre di
+    evitamento ostacoli (bypass), sorpassi di veicoli parcheggiati o biciclette, e regolando l'attivazione del sistema
+    di cruise control adattivo in risposta al comportamento del traffico locale.
+    """
     def evaluate(self, **kwargs):
+        """
+        Analizza l'ambiente circostante per rilevare ostacoli dinamici e determinare la reazione ottimale dell'ego-veicolo.
+
+        Il metodo esegue una scansione della flotta di veicoli nelle vicinanze. Se un target viene individuato, ne calcola
+        la distanza e la posizione relativa, innescando una logica decisionale contestuale:
+        - Ostacoli vulnerabili (Biciclette): valuta se occupano il centro della corsia per calcolare una traiettoria
+        di bypass evasiva completa, o se sono posizionati a lato, calcolando un semplice scostamento laterale.
+        - Ostacoli statici (Veicoli parcheggiati): genera traiettorie di sorpasso se la corsia lo consente.
+        - Situazioni di emergenza: impone un arresto immediato (halt_vehicle) se la distanza scende sotto la soglia critica.
+        - Traffico regolare: attiva il sistema di Adaptive Cruise Control (ACC) per il mantenimento della distanza di sicurezza.
+
+        Parametri:
+            **kwargs: Dizionario di argomenti chiave variabili. I parametri attesi includono:
+                - ego_vehicle_wp (carla.Waypoint): Il waypoint corrente in cui si trova l'ego-veicolo.
+                - debug (bool, opzionale): Flag per l'abilitazione dei log e delle informazioni visive (default: False).
+
+        Ritorna:
+            Un'azione esecutiva per il controller del veicolo, che può tradursi nel passaggio al planner locale, in una
+            manovra di arresto, o nel mantenimento di un comportamento di guida normale. Ritorna None se l'area è libera.
+        """
         sys = self.core_system
         current_wp = kwargs.get('ego_vehicle_wp')
         debug_mode = kwargs.get('debug', False)
@@ -74,26 +103,40 @@ class FleetProximityEvaluator(BaseEvaluator):
 
     def is_road_straight(self, ego_yaw, vehicle_yaw, tolerance=10):
         """
-        This function checks if the road is straight. In particular, it checks if the yaw of the ego vehicle
-        and the vehicle in front are similar.
+        Verifica la linearità del tratto stradale attuale tramite il confronto degli angoli di imbardata dei veicoli coinvolti.
 
-            :param ego_yaw (float): yaw of the ego vehicle.
-            :param vehicle_yaw (float): yaw of the vehicle in front.
-            :param tolerance (int): tolerance value to check if the road is straight.
+        Nel contesto della guida autonoma, questo controllo geometrico è fondamentale per le valutazioni di sorpasso.
+        Assumendo che i veicoli procedano allineati alla strada, una minima deviazione tra le rispettive rotazioni
+        sull'asse Z indica che la via è rettilinea, condizione necessaria per avviare manovre di bypass in sicurezza
+        evitando deviazioni improvvise dovute alla curvatura della corsia.
 
-            :return (bool): True if the road is straight, False otherwise.
+        Parametri:
+            ego_yaw (float): Angolo di imbardata (yaw) dell'ego-veicolo, misurato in gradi.
+            vehicle_yaw (float): Angolo di imbardata (yaw) del veicolo target (es. bicicletta), misurato in gradi.
+            tolerance (int, opzionale): Soglia massima di differenza angolare consentita in gradi. Default a 10.
+
+        Ritorna:
+            bool: True se la differenza assoluta tra gli angoli è strettamente inferiore alla tolleranza, False altrimenti.
         """
         return abs(ego_yaw - vehicle_yaw) < tolerance
 
 
     def is_bicycle_near_center(self,vehicle_location, ego_vehicle_wp):
         """
-        This function checks if the bicycle is near the center of the lane.
+        Determina se una bicicletta si trova nella porzione centrale della corsia percorsa dall'ego-veicolo.
 
-            :param vehicle_location (carla.Location): location of the vehicle.
-            :param ego_vehicle_wp (carla.Waypoint): waypoint of the ego vehicle.
+        Il metodo calcola lo scostamento trasversale (sull'asse Y) tra le coordinate fisiche del mezzo vulnerabile rilevato
+        e il centro ideale della corsia di marcia (rappresentato dal waypoint dell'ego-veicolo). Questa informazione guida
+        il sistema decisionale: una bicicletta centrale richiede una vera e propria invasione della corsia adiacente
+        (bypass trajectory), mentre una bicicletta sul margine stradale può essere superata con un lieve scostamento interno.
 
-            :return (bool): True if the bicycle is near the center of the lane, False otherwise.
+        Parametri:
+            vehicle_location (carla.Location): L'oggetto contenente le coordinate spaziali attuali del veicolo target.
+            ego_vehicle_wp (carla.Waypoint): Il waypoint di riferimento dell'ego-veicolo.
+
+        Ritorna:
+            bool: True se la distanza trasversale sull'asse Y risulta inferiore a una tolleranza prefissata (es. 0.3 metri),
+                False se il veicolo target è posizionato più vicini ai margini laterali della carreggiata.
         """
         lane_center_offset = 0.3  # How close to the center the bicycle needs to be considered in the center
         vehicle_y = vehicle_location.y
