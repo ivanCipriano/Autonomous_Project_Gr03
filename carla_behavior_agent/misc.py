@@ -138,51 +138,32 @@ def compute_distance_from_center(actor1, actor2 = None, distance = 5):
     return distance - actor1_extent - actor2_extent
 
 def get_distance(a, b):
-        """
-        Calculate the distance between two objects: a and b. These two objects can be of type carla.Vehicle, carla.Waypoint, or carla.Location.
+    """
+    Calculate the distance between two objects: a and b. These objects can be
+    of type carla.Actor, carla.Landmark, carla.Waypoint, carla.Transform, or carla.Location.
 
-        :param a: first object (carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location)
-        :param b: second object (carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location)
+    :param a: first object
+    :param b: second object
+    :return: distance between the two objects (float)
+    """
 
-        :return: distance between the two objects (float)
-        """
-        # Check if input 'a' is of type carla.Landmark and convert it to a carla.Waypoint object.
-        if isinstance(a, carla.Landmark):
-            a = a.waypoint
-        # Check if input 'b' is of type carla.Landmark and convert it to a carla.Waypoint object.
-        if isinstance(b, carla.Landmark):
-            b = b.waypoint
-            
-        # Check if input 'a' is of type carla.Transform and convert it to a carla.Location object.
-        if isinstance(a, carla.Transform):
-            a = a.location
-        # Check if input 'b' is of type carla.Transform and convert it to a carla.Location object.
-        if isinstance(b, carla.Transform):
-            b = b.location
-
-        # Check if both input objects are of type carla.Actor.
-        if isinstance(a, carla.Actor) and isinstance(b, carla.Actor):
-            return a.get_location().distance(b.get_location())
-        # Check if input 'a' is of type carla.Actor and input 'b' is of type carla.Waypoint.
-        elif isinstance(a, carla.Actor) and isinstance(b, carla.Waypoint):
-            return a.get_location().distance(b.transform.location)
-        # Check if input 'a' is of type carla.Waypoint and input 'b' is of type carla.Actor.
-        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Actor):
-            return a.transform.location.distance(b.get_location())
-        # Check if both input objects are of type carla.Waypoint.
-        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Waypoint):
-            return a.transform.location.distance(b.transform.location)
-        # Check if input 'a' is of type carla.Location and input 'b' is of type carla.Location.
-        elif isinstance(a, carla.Actor) and isinstance(b, carla.Location):
-            return a.get_location().distance(b)
-        elif isinstance(a, carla.Location) and isinstance(b, carla.Actor):
-            return a.distance(b.get_location())
-        elif isinstance(a, carla.Location) and isinstance(b, carla.Waypoint):
-            return a.distance(b.transform.location)
-        elif isinstance(a, carla.Waypoint) and isinstance(b, carla.Location):
-            return a.transform.location.distance(b)
-        elif isinstance(a, carla.Location) and isinstance(b, carla.Location):
-            return a.distance(b)
-        # If none of the above conditions are met, raise a ValueError.
+    def extract_location(obj):
+        """Helper interno per ricavare la carla.Location da vari oggetti CARLA."""
+        if isinstance(obj, carla.Location):
+            return obj
+        elif isinstance(obj, carla.Transform):
+            return obj.location
+        elif isinstance(obj, carla.Waypoint):
+            return obj.transform.location
+        elif isinstance(obj, carla.Landmark):
+            return obj.waypoint.transform.location
+        elif isinstance(obj, carla.Actor):
+            return obj.get_location()
         else:
-            raise ValueError("Invalid input types. Please provide either carla.Actor, carla.Landmark, carla.Waypoint, or carla.Location objects.")
+            raise ValueError(f"Invalid input type: {type(obj).__name__}. "
+                             "Expected carla.Actor, carla.Landmark, carla.Transform, carla.Waypoint, or carla.Location.")
+
+    loc_a = extract_location(a)
+    loc_b = extract_location(b)
+
+    return loc_a.distance(loc_b)
