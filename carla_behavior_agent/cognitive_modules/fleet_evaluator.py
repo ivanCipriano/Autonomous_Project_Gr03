@@ -38,7 +38,6 @@ class FleetProximityEvaluator(BaseEvaluator):
         current_wp = kwargs.get('ego_vehicle_wp')
         debug_mode = kwargs.get('debug', False)
 
-        # Scansione della flotta nei paraggi
         v_state, vehicle, v_dist = self.scan_for_fleet(current_wp)
 
         if not v_state:
@@ -138,7 +137,7 @@ class FleetProximityEvaluator(BaseEvaluator):
             bool: True se la distanza trasversale sull'asse Y risulta inferiore a una tolleranza prefissata (es. 0.3 metri),
                 False se il veicolo target è posizionato più vicini ai margini laterali della carreggiata.
         """
-        lane_center_offset = 0.3  # How close to the center the bicycle needs to be considered in the center
+        lane_center_offset = 0.3 
         vehicle_y = vehicle_location.y
         lane_center_y = ego_vehicle_wp.transform.location.y
         return abs(vehicle_y - lane_center_y) < lane_center_offset
