@@ -49,7 +49,7 @@ class BaseEvaluator:
         """
         raise NotImplementedError("Il metodo evaluate deve essere implementato.")
 
-    def halt_vehicle(self) -> carla.VehicleControl:
+    def halt_vehicle(self):
         """
         Genera un comando di controllo per l'arresto immediato del veicolo autonomo.
 
