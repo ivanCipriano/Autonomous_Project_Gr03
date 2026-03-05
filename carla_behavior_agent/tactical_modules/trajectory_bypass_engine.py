@@ -1,4 +1,3 @@
-# tactical_modules/trajectory_bypass_engine.py
 import carla
 import math
 from basic_agent import BasicAgent
@@ -7,11 +6,23 @@ from misc import get_distance, is_within_distance, compute_distance_from_center,
 
 class TrajectoryBypassEngine(BasicAgent):
     """
-    Motore tattico per la generazione di traiettorie di elusione e sorpasso.
-    (Sostituisce ex OvertakeManager)
+    Motore tattico dedicato alla pianificazione e generazione di traiettorie per l'elusione e il sorpasso di ostacoli.
+    Gestisce in autonomia la stima degli spazi, il controllo del traffico in senso opposto e la creazione del percorso.
     """
 
     def __init__(self, vehicle, opt_dict={}, map_inst=None, grp_inst=None):
+        """
+        Inizializza il motore di elusione e sorpasso.
+
+        Args:
+            vehicle (carla.Vehicle): L'attore veicolo controllato dall'agente.
+            opt_dict (dict, opzionale): Dizionario contenente opzioni di configurazione aggiuntive. Default a {}.
+            map_inst (carla.Map, opzionale): Istanza della mappa CARLA per interrogazioni spaziali. Default a None.
+            grp_inst (GlobalRoutePlanner, opzionale): Istanza del pianificatore di percorso globale. Default a None.
+
+        Returns:
+            None
+        """
         super().__init__(vehicle, opt_dict=opt_dict, map_inst=map_inst, grp_inst=grp_inst)
         self._evasion_lock_frames = 0
         self._is_executing_bypass = False
@@ -20,16 +31,29 @@ class TrajectoryBypassEngine(BasicAgent):
     def compute_evasion_trajectory(self, target_entity: carla.Actor, current_wp: carla.Waypoint,
                                    base_offset: float = 1, opposite_offset: float = 0,
                                    proximity_margin: float = 18, max_velocity: float = 50):
-        """Genera il tracciato per bypassare un ostacolo (ex run_step)"""
+        """
+        Genera una traiettoria sicura per sorpassare o aggirare un ostacolo.
+        Calcola gli spazi necessari, stima i tempi della manovra, verifica il traffico in arrivo
+        nella corsia opposta e si assicura che non vi siano incroci critici nel percorso.
 
+        Args:
+            target_entity (carla.Actor): L'ostacolo o il veicolo lento da sorpassare.
+            current_wp (carla.Waypoint): Il waypoint attuale del veicolo controllato (ego vehicle).
+            base_offset (float, opzionale): Distanza di offset iniziale per il cambio di corsia. Default a 1.
+            opposite_offset (float, opzionale): Distanza di avanzamento necessaria nella corsia opposta. Se 0, viene calcolata dinamicamente. Default a 0.
+            proximity_margin (float, opzionale): Margine di sicurezza frontale prima di iniziare la manovra. Default a 18.
+            max_velocity (float, opzionale): Velocità massima stimata (in km/h) dei veicoli in senso opposto. Default a 50.
+
+        Returns:
+            list o None: Lista di carla.Waypoint che definiscono la traiettoria di elusione, oppure None se la manovra non è sicura.
+        """
         if not opposite_offset:
             opposite_offset = self._estimate_opposite_clearance(target_entity, 30)
 
         v_length = self._vehicle.bounding_box.extent.x
         l_width = current_wp.lane_width
 
-        self._required_clearance, hypotenuse = self._calculate_spatial_clearance(v_length, l_width, base_offset,
-                                                                                 opposite_offset, proximity_margin)
+        self._required_clearance, hypotenuse = self._calculate_spatial_clearance(v_length, l_width, base_offset, opposite_offset, proximity_margin)
         maneuver_time = self._estimate_maneuver_duration(self._vehicle, self._required_clearance)
 
         oncoming_travel_dist = maneuver_time * max_velocity / 3.6
@@ -66,26 +90,72 @@ class TrajectoryBypassEngine(BasicAgent):
 
     @property
     def is_bypassing(self):
+        """
+        Proprietà che indica se il veicolo sta attualmente eseguendo una manovra di sorpasso/elusione.
+
+        Returns:
+            bool: True se la manovra è in corso, False altrimenti.
+        """
         return self._is_executing_bypass
 
     @is_bypassing.setter
     def is_bypassing(self, val):
+        """
+        Imposta lo stato di esecuzione della manovra di sorpasso.
+
+        Args:
+            val (bool): Nuovo stato della manovra.
+
+        Returns:
+            None
+        """
         self._is_executing_bypass = val
 
     @property
     def evasion_lock(self):
+        """
+        Proprietà che restituisce il numero di frame per i quali la logica di elusione è "bloccata" (ossia la manovra deve completarsi).
+
+        Returns:
+            int: Numero di frame di blocco rimanenti.
+        """
         return self._evasion_lock_frames
 
     @evasion_lock.setter
     def evasion_lock(self, val):
+        """
+        Imposta il numero di frame di blocco per la manovra elusiva.
+
+        Args:
+            val (int): Numero di frame desiderati.
+
+        Returns:
+            None
+        """
         self._evasion_lock_frames = val
 
     @property
     def required_clearance(self):
+        """
+        Proprietà che restituisce lo spazio libero (clearance) richiesto per completare il sorpasso in sicurezza.
+
+        Returns:
+            float: Distanza necessaria in metri.
+        """
         return self._required_clearance
 
-    # --- Metodi Privati Rinominati ---
-    def _estimate_opposite_clearance(self, actor: carla.Actor, max_distance: float = 30) -> float:
+    def _estimate_opposite_clearance(self, actor, max_distance = 30):
+        """
+        Stima la lunghezza del tratto nella corsia opposta necessario per superare l'ostacolo.
+        Considera la lunghezza dell'attore target e di eventuali altri veicoli parcheggiati adiacenti ad esso.
+
+        Args:
+            actor (carla.Actor): L'ostacolo primario da cui calcolare la distanza.
+            max_distance (float, opzionale): Distanza massima entro cui cercare altri veicoli adiacenti. Default a 30.
+
+        Returns:
+            float: Distanza totale stimata necessaria nella corsia opposta (include un margine di sicurezza di 3 metri).
+        """
         actor_length = actor.bounding_box.extent.x
         distance_other_lane = actor_length
 
@@ -105,8 +175,7 @@ class TrajectoryBypassEngine(BasicAgent):
             if is_within_distance(target_transform=v.get_transform(),
                                   reference_transform=previous_vehicle.get_transform(), max_distance=max_distance,
                                   angle_interval=[0, 60]):
-                v_distance = compute_distance_from_center(actor1=previous_vehicle, actor2=v,
-                                                          distance=get_distance(v, previous_vehicle))
+                v_distance = compute_distance_from_center(actor1=previous_vehicle, actor2=v, distance=get_distance(v, previous_vehicle))
             else:
                 continue
             distance_other_lane += v.bounding_box.extent.x + v_distance
@@ -114,7 +183,18 @@ class TrajectoryBypassEngine(BasicAgent):
 
         return distance_other_lane + 3
 
-    def _detect_oncoming_traffic(self, ego_wp: carla.Waypoint, search_distance: float = 30):
+    def _detect_oncoming_traffic(self, ego_wp, search_distance = 30):
+        """
+        Analizza la corsia opposta per individuare veicoli in avvicinamento (oncoming traffic).
+        Utilizza un'estensione virtuale dei bounding box lungo i vettori forward per prevedere collisioni imminenti.
+
+        Args:
+            ego_wp (carla.Waypoint): Il waypoint corrente del veicolo ego.
+            search_distance (float, opzionale): Raggio di ricerca frontale in metri. Default a 30.
+
+        Returns:
+            carla.Actor o None: L'attore veicolo rilevato in senso opposto, oppure None se la corsia è libera.
+        """
         def _extend_bounding_box(actor):
             wp = self._map.get_waypoint(actor.get_location())
             transform = wp.transform
@@ -124,8 +204,7 @@ class TrajectoryBypassEngine(BasicAgent):
             return transform
 
         vehicle_list = self._get_ordered_vehicles(self._vehicle, search_distance)
-        oncoming_list = [v for v in vehicle_list if
-                         self._map.get_waypoint(v.get_location()).lane_id == ego_wp.lane_id * -1]
+        oncoming_list = [v for v in vehicle_list if self._map.get_waypoint(v.get_location()).lane_id == ego_wp.lane_id * -1]
 
         if not oncoming_list: return None
 
@@ -138,12 +217,38 @@ class TrajectoryBypassEngine(BasicAgent):
 
     @staticmethod
     def _calculate_spatial_clearance(v_length, l_width, base_offset, opposite_offset, proximity_margin):
+        """
+        Calcola la distanza spaziale totale richiesta per l'intera manovra geometrica, includendo
+        l'ingresso, la percorrenza nella corsia opposta e il rientro, sfruttando l'ipotenusa del triangolo di cambio corsia.
+
+        Args:
+            v_length (float): Lunghezza dell'ego vehicle.
+            l_width (float): Larghezza della corsia.
+            base_offset (float): Offset longitudinale per il primo cambio corsia.
+            opposite_offset (float): Distanza lineare da percorrere nella corsia di sorpasso.
+            proximity_margin (float): Margine di sicurezza iniziale.
+
+        Returns:
+            tuple: Una tupla (total_clearance, hypotenuse) dove total_clearance è la distanza totale richiesta e hypotenuse è la distanza diagonale per il cambio corsia.
+        """
         hypotenuse = math.sqrt(v_length ** 2 + l_width ** 2)
         total_clearance = proximity_margin + base_offset + hypotenuse + opposite_offset + hypotenuse
         return total_clearance, hypotenuse
 
     @staticmethod
     def _estimate_maneuver_duration(ego_vehicle, total_clearance):
+        """
+        Stima il tempo necessario (in secondi) per completare l'intera manovra di sorpasso,
+        utilizzando le equazioni del moto uniformemente accelerato.
+
+
+        Args:
+            ego_vehicle (carla.Vehicle): L'attore del veicolo controllato (per leggerne la velocità corrente).
+            total_clearance (float): La distanza totale (in metri) calcolata per la manovra.
+
+        Returns:
+            float: Tempo stimato in secondi.
+        """
         v0 = get_speed(ego_vehicle) / 3.6
         a = 3.5
         return (-v0 + math.sqrt(v0 ** 2 + 2 * a * total_clearance)) / a
