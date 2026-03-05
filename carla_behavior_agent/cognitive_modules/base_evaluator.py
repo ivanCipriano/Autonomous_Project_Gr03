@@ -6,15 +6,62 @@ from local_planner import RoadOption
 
 
 class BaseEvaluator:
-    """Interfaccia base per la catena di valutazione cognitiva e libreria di funzioni percettive."""
+    """
+    Interfaccia base per la catena di valutazione cognitiva e libreria di funzioni percettive.
+
+    Questa classe funge da architettura fondamentale per i moduli decisionali di un veicolo 
+    a guida autonoma all'interno del simulatore CARLA. Fornisce i metodi essenziali per 
+    l'analisi dell'ambiente circostante, l'interazione con gli altri attori e la gestione 
+    della cinematica longitudinale (come l'Adaptive Cruise Control) e le logiche di evasione 
+    degli ostacoli.
+    """
 
     def __init__(self, core_system):
+        """
+        Inizializza il modulo di valutazione di base.
+
+        Collega l'istanza corrente al sistema di controllo centrale (core system) dell'agente 
+        autonomo, permettendo l'accesso allo stato del veicolo, ai parametri comportamentali e 
+        ai dati aggregati dei sensori.
+
+        Args:
+            core_system (object): L'istanza del sistema centrale o dell'agente principale 
+                                che gestisce il ciclo di vita e lo stato globale del veicolo.
+        """
         self.core_system = core_system
 
     def evaluate(self, **kwargs) -> carla.VehicleControl:
+        """
+        Valuta lo stato corrente e calcola i comandi di controllo del veicolo.
+
+        Questo è un metodo astratto che deve essere obbligatoriamente implementato dalle 
+        sottoclassi per definire specifiche euristiche o modelli decisionali (es. reti neurali, 
+        alberi comportamentali) per la presa di decisione tattica o operativa.
+
+        Args:
+            **kwargs: Argomenti variabili dipendenti dalla specifica implementazione del modulo.
+
+        Returns:
+            carla.VehicleControl: I comandi di accelerazione, frenata e sterzata da applicare.
+
+        Raises:
+            NotImplementedError: Se il metodo non viene sovrascritto dalla classe derivata.
+        """
         raise NotImplementedError("Il metodo evaluate deve essere implementato.")
 
     def halt_vehicle(self) -> carla.VehicleControl:
+        """
+        Genera un comando di controllo per l'arresto immediato del veicolo autonomo.
+
+        Applica la massima pressione sul freno (basata sui limiti fisici o imposti e configurati 
+        nel core_system) e azzera l'acceleratore, garantendo un arresto in sicurezza senza 
+        l'attivazione del freno a stazionamento. Viene tipicamente invocato in situazioni di 
+        emergenza o in presenza di un ostacolo critico a distanza ravvicinata.
+
+        Returns:
+            carla.VehicleControl: Comando di controllo con acceleratore a 0.0 e freno impostato 
+                                al valore massimo consentito.
+        """
         cmd = carla.VehicleControl()
         cmd.throttle = 0.0
         cmd.brake = self.core_system._max_brake
@@ -22,7 +69,25 @@ class BaseEvaluator:
         return cmd
 
     def adaptive_cruise_control(self, target_vehicle, distance, debug=False):
-        """Ex car_following_manager: Modula la velocità in base al veicolo che precede."""
+        """
+        Modula la velocità longitudinale in base al veicolo che precede (Car Following).
+
+        Implementa la logica dell'Adaptive Cruise Control (ACC) calcolando il Time-To-Collision 
+        (TTC) in base al delta di velocità. Adegua la velocità target dell'ego-vehicle 
+        (accelerando, mantenendo l'andatura o frenando dolcemente) in base alla distanza 
+        relativa, nel rigoroso rispetto dei limiti di velocità della mappa e dei parametri di 
+        sicurezza impostati nel profilo comportamentale.
+
+        Args:
+            target_vehicle (carla.Actor): Il veicolo rilevato dinanzi all'ego-vehicle.
+            distance (float): La distanza in metri tra l'ego-vehicle e il target_vehicle.
+            debug (bool, opzionale): Se True, attiva il tracciamento grafico di debug 
+                                    all'interno del planner locale. Default a False.
+
+        Returns:
+            carla.VehicleControl: Il comando di attuazione ottimizzato dal controller PID 
+                                per raggiungere la velocità target di sicurezza.
+        """
         sys = self.core_system
         vehicle_speed = get_speed(target_vehicle)
         delta_v = max(1, (sys._speed - vehicle_speed) / 3.6)
@@ -41,7 +106,19 @@ class BaseEvaluator:
         return sys._local_planner.run_step(debug=debug)
 
     def _process_tailgating(self, waypoint, vehicle_list):
-        """Ex _tailgating: Gestisce le dinamiche di inseguimento e cambio corsia."""
+        """
+        Gestisce le dinamiche di inseguimento ravvicinato e valuta manovre evasive di cambio corsia.
+
+        Analizza la presenza di veicoli più lenti immediatamente davanti all'ego-vehicle. Se 
+        le condizioni di viabilità lo permettono (es. linee di demarcazione tratteggiate) e 
+        le corsie adiacenti sono libere da ostacoli, il metodo innesca proattivamente una manovra 
+        di sorpasso verso la corsia di destra o sinistra per risolvere la situazione di congestione 
+        (tailgating resolution).
+
+        Args:
+            waypoint (carla.Waypoint): Il waypoint corrente su cui si trova l'ego-vehicle.
+            vehicle_list (list): Lista degli attori di tipo veicolo presenti nell'ambiente simulato.
+        """
         sys = self.core_system
         left_turn = waypoint.left_lane_marking.lane_change
         right_turn = waypoint.right_lane_marking.lane_change
@@ -76,7 +153,24 @@ class BaseEvaluator:
                                         left_wpt.transform.location)
 
     def scan_for_fleet(self, waypoint):
-        """Ex collision_and_car_avoid_manager: Rileva veicoli e bici nei dintorni."""
+        """
+        Scansiona l'ambiente circostante per rilevare flotte di veicoli o ciclisti.
+
+        Filtra gli attori nella simulazione considerando solo quelli in un raggio spaziale di 
+        interesse. A seconda dell'intenzione di manovra dell'ego-vehicle (mantenimento corsia, 
+        cambio corsia a sinistra o destra), il metodo controlla eventuali ostacoli frontali 
+        o laterali calcolando offset di corsia, tolleranze angolari e proiettando bounding box. 
+        Include logiche specifiche di alta priorità per l'identificazione e la salvaguardia dei ciclisti.
+
+        Args:
+            waypoint (carla.Waypoint): Il waypoint corrente dell'ego-vehicle.
+
+        Returns:
+            tuple: Una tupla contenente tre elementi:
+                - bool: True se è stato rilevato un ostacolo rilevante, False altrimenti.
+                - carla.Actor o None: L'istanza dell'oggetto veicolo/ciclista rilevato come ostacolo.
+                - float: La distanza in metri dall'ostacolo, oppure -1 se l'area è libera.
+        """
         sys = self.core_system
         v_list = sys._world.get_actors().filter("*vehicle*")
         v_list = [v for v in v_list if get_distance(v, waypoint) < 13 and v.id != sys._vehicle.id]
@@ -120,13 +214,35 @@ class BaseEvaluator:
         return v_state, v_obj, v_dist
 
     def is_a_bicycle(self,vehicle_name):
+        """
+        Verifica se l'identificativo del veicolo corrisponde a una bicicletta.
+
+        Funzione di classificazione semantica per il modulo percettivo. Distingue i velocipedi 
+        dai normali veicoli a motore confrontando il type_id di CARLA con una whitelist di modelli, 
+        permettendo al sistema di adottare cautele specifiche per gli utenti vulnerabili della strada.
+
+        Args:
+            vehicle_name (str): L'identificativo testuale del modello dell'attore (es. 'vehicle.bh.crossbike').
+
+        Returns:
+            bool: True se il modello appartiene alla categoria delle biciclette, False altrimenti.
+        """
         BICYCLES = ['vehicle.bh.crossbike', 'vehicle.diamondback.century', 'vehicle.gazelle.omafiets']
         return vehicle_name in BICYCLES
 
     def positive(self,num):
         """
-        Return the given number if positive, else 0
+        Garantisce la restituzione di un valore scalare strettamente non negativo.
 
-            :param num: value to check
+        Funzione matematica di supporto che agisce come un rettificatore. Viene impiegata 
+        frequentemente nei calcoli di controllo longitudinale (es. limitazione della velocità 
+        o delta di decelerazione) per neutralizzare anomalie matematiche e prevenire richieste di 
+        velocità negative non fisicamente attuabili.
+
+        Args:
+            num (float): Il valore numerico in ingresso da normalizzare.
+
+        Returns:
+            float: Il valore originale se è maggiore di 0.0, altrimenti 0.0.
         """
         return num if num > 0.0 else 0.0
