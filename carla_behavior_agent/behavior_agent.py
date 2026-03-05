@@ -18,7 +18,7 @@ from tactical_modules.intersection_navigation_engine import IntersectionNavigati
 from cognitive_modules.signal_evaluator import TrafficSignalEvaluator
 from cognitive_modules.pedestrian_evaluator import BipedalHazardEvaluator
 from cognitive_modules.obstacle_evaluator import StaticObstructionEvaluator
-from cognitive_modules.stop_sign_evaluator import MandatoryStopEvaluator
+from cognitive_modules.stop_sign_evaluator import StopEvaluator
 from cognitive_modules.fleet_evaluator import FleetProximityEvaluator
 from cognitive_modules.cruise_evaluator import NavigationCruiseEvaluator
 
@@ -70,7 +70,7 @@ class BehaviorAgent(BasicAgent):
             TrafficSignalEvaluator(core_system=self),
             BipedalHazardEvaluator(core_system=self),
             StaticObstructionEvaluator(core_system=self),
-            MandatoryStopEvaluator(core_system=self),
+            StopEvaluator(core_system=self),
             FleetProximityEvaluator(core_system=self),
             NavigationCruiseEvaluator(core_system=self)
         ]
