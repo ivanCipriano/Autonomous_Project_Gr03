@@ -48,10 +48,16 @@ class BasicAgent(object):
         self._use_bbs_detection = False
         self._target_speed = 5.0
         self._sampling_resolution = 2.0
-        self._base_tlight_threshold = 5.0
-        self._base_sign_threshold = 20.0
-        self._base_vehicle_threshold = 5.0
-        self._speed_ratio = 1
+        self._base_tlight_threshold = opt_dict.get('base_tlight_threshold', 5.0)
+        self._base_sign_threshold = opt_dict.get('base_sign_threshold', 20.0)
+        self._base_vehicle_threshold = opt_dict.get('base_vehicle_threshold', 5.0)
+        self._speed_ratio = opt_dict.get('detection_speed_ratio', 1.0)
+        self._pedestrian_scan_normal = opt_dict.get('pedestrian_scan_normal', 20.0)
+        self._pedestrian_scan_junction = opt_dict.get('pedestrian_scan_junction', 12.0)
+        self._obstacle_scan_radius = opt_dict.get('obstacle_scan_radius', 20.0)
+        self._obstacle_critical_dist = opt_dict.get('obstacle_critical_dist', 6.0)
+        self._fleet_straight_tolerance = opt_dict.get('fleet_straight_tolerance', 10.0)
+        self._fleet_center_offset = opt_dict.get('fleet_center_offset', 0.3)
         self._max_brake = 0.5
         self._offset = 0
         self._simulation_timestamp = 0.05
@@ -68,12 +74,6 @@ class BasicAgent(object):
             self._use_bbs_detection = opt_dict['use_bbs_detection']
         if 'sampling_resolution' in opt_dict:
             self._sampling_resolution = opt_dict['sampling_resolution']
-        if 'base_tlight_threshold' in opt_dict:
-            self._base_tlight_threshold = opt_dict['base_tlight_threshold']
-        if 'base_vehicle_threshold' in opt_dict:
-            self._base_vehicle_threshold = opt_dict['base_vehicle_threshold']
-        if 'detection_speed_ratio' in opt_dict:
-            self._speed_ratio = opt_dict['detection_speed_ratio']
         if 'max_brake' in opt_dict:
             self._max_brake = opt_dict['max_brake']
         if 'offset' in opt_dict:

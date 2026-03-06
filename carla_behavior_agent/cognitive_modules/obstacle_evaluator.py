@@ -38,8 +38,8 @@ class StaticObstructionEvaluator(BaseEvaluator):
         """
         sys = self.core_system
         obs_list = sys._world.get_actors().filter(element_query)
-        obs_list = [o for o in obs_list if is_within_distance(o.get_transform(), sys._vehicle.get_transform(), 20,
-                                                              angle_interval=angle_interval)]
+        obs_list = [o for o in obs_list if is_within_distance(o.get_transform(), sys._vehicle.get_transform(),
+                    sys._obstacle_scan_radius, angle_interval=angle_interval)]
 
         if not obs_list:
             return False, None, -1
@@ -93,7 +93,7 @@ class StaticObstructionEvaluator(BaseEvaluator):
                 print("[Cognition] -> Trajectory alteration: bypassing environmental hazard.")
                 sys._BehaviorAgent__update_global_plan(overtake_path=evasion_path)
 
-            if not sys._bypass_engine.is_bypassing and actual_dist < 6:
+            if not sys._bypass_engine.is_bypassing and actual_dist < sys._obstacle_critical_dist:
                 print("--- [Cognition] Bypass unfeasible. Executing critical halt.")
                 return self.halt_vehicle()
 

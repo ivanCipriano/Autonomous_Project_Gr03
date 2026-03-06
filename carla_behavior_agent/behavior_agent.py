@@ -8,13 +8,12 @@
 waypoints and avoiding other vehicles. The agent also responds to traffic lights,
 traffic signs, and has different possible configurations. """
 
-import numpy as np
 import carla
 from basic_agent import BasicAgent
 from local_planner import RoadOption
 from behavior_types import Cautious, Aggressive, Normal
 from tactical_modules.trajectory_bypass_engine import TrajectoryBypassEngine
-from tactical_modules.intersection_navigation_engine import IntersectionNavigationEngine, IntersectionTopology
+from tactical_modules.intersection_navigation_engine import IntersectionNavigationEngine
 from cognitive_modules.signal_evaluator import TrafficSignalEvaluator
 from cognitive_modules.pedestrian_evaluator import BipedalHazardEvaluator
 from cognitive_modules.obstacle_evaluator import StaticObstructionEvaluator
@@ -22,6 +21,7 @@ from cognitive_modules.stop_sign_evaluator import StopEvaluator
 from cognitive_modules.fleet_evaluator import FleetProximityEvaluator
 from cognitive_modules.cruise_evaluator import NavigationCruiseEvaluator
 from misc import *
+from types import SimpleNamespace
 
 class BehaviorAgent(BasicAgent):
     """
@@ -50,12 +50,9 @@ class BehaviorAgent(BasicAgent):
 
         super().__init__(vehicle, opt_dict=opt_dict, map_inst=map_inst, grp_inst=grp_inst)
 
-        self._approach_speed = 10.0
-        self._behavior = \
-            Aggressive() if behavior == 'aggressive' else \
-            Normal() if behavior == 'normal' else \
-            Cautious()            
-        self._direction = None
+        self._approach_speed = opt_dict.get('approach_speed', 10.0)
+        self._min_speed = opt_dict.get('min_speed', 5.0)
+        self._rain_speed_penalty = opt_dict.get('rain_speed_penalty', 5.0)
         self._incoming_direction = None
         self._incoming_waypoint = None
         self._look_ahead_steps = 0
@@ -77,7 +74,13 @@ class BehaviorAgent(BasicAgent):
         self._bypass_engine = TrajectoryBypassEngine(self._vehicle, opt_dict)
         self._navigation_engine = IntersectionNavigationEngine(self._vehicle, opt_dict)
 
-        self._behavior = Cautious() if behavior == 'cautious' else Aggressive() if behavior == 'aggressive' else Normal()
+        profiles = opt_dict.get('behavior_profiles', {})
+        if behavior in profiles:
+            self._behavior = SimpleNamespace(**profiles[behavior])
+        else:
+            self._behavior = Cautious()
+
+        self._direction = None
         self._is_raining = False
 
     def run_step(self, debug=False):
@@ -185,7 +188,7 @@ class BehaviorAgent(BasicAgent):
         self._speed = get_speed(self._vehicle)
 
         self._speed_limit = self._vehicle.get_speed_limit() 
-        self._speed_limit -= 5 if self._is_raining else 0
+        self._speed_limit -= self._rain_speed_penalty if self._is_raining else 0
 
         self._local_planner.set_speed(self._speed_limit)
 

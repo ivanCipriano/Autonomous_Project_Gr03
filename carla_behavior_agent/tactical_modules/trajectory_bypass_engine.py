@@ -27,6 +27,9 @@ class TrajectoryBypassEngine(BasicAgent):
         self._evasion_lock_frames = 0
         self._is_executing_bypass = False
         self._required_clearance = 0
+        self._bypass_safety_margin = opt_dict.get('bypass_safety_margin', 3.0)
+        self._bypass_search_radius = opt_dict.get('bypass_search_radius', 30.0)
+        self._ego_acceleration_estimate = opt_dict.get('ego_acceleration_estimate', 3.5)
 
     def compute_evasion_trajectory(self, target_entity: carla.Actor, current_wp: carla.Waypoint,
                                    base_offset: float = 1, opposite_offset: float = 0,
@@ -48,13 +51,13 @@ class TrajectoryBypassEngine(BasicAgent):
             list o None: Lista di carla.Waypoint che definiscono la traiettoria di elusione, oppure None se la manovra non è sicura.
         """
         if not opposite_offset:
-            opposite_offset = self._estimate_opposite_clearance(target_entity, 30)
+            opposite_offset = self._estimate_opposite_clearance(target_entity, self._bypass_search_radius)
 
         v_length = self._vehicle.bounding_box.extent.x
         l_width = current_wp.lane_width
 
         self._required_clearance, hypotenuse = self._calculate_spatial_clearance(v_length, l_width, base_offset, opposite_offset, proximity_margin)
-        maneuver_time = self._estimate_maneuver_duration(self._vehicle, self._required_clearance)
+        maneuver_time = self._estimate_maneuver_duration(self._vehicle, self._required_clearance, self._ego_acceleration_estimate)
 
         oncoming_travel_dist = maneuver_time * max_velocity / 3.6
         scan_radius = self._required_clearance + oncoming_travel_dist
@@ -69,7 +72,8 @@ class TrajectoryBypassEngine(BasicAgent):
             if oncoming_entity:
                 next_oncoming_wp = self._map.get_waypoint(oncoming_entity.get_location()).next(oncoming_travel_dist)[0]
                 collision_risk = not is_within_distance(target_transform=next_oncoming_wp.transform,
-                                                        reference_transform=next_ego_wp.transform, max_distance=30,
+                                                        reference_transform=next_ego_wp.transform,
+                                                        max_distance=self._bypass_search_radius,
                                                         angle_interval=[0, 90])
         except Exception:
             collision_risk = False
@@ -181,7 +185,7 @@ class TrajectoryBypassEngine(BasicAgent):
             distance_other_lane += v.bounding_box.extent.x + v_distance
             previous_vehicle = v
 
-        return distance_other_lane + 3
+        return distance_other_lane + self._bypass_safety_margin
 
     def _detect_oncoming_traffic(self, ego_wp, search_distance = 30):
         """
@@ -236,7 +240,7 @@ class TrajectoryBypassEngine(BasicAgent):
         return total_clearance, hypotenuse
 
     @staticmethod
-    def _estimate_maneuver_duration(ego_vehicle, total_clearance):
+    def _estimate_maneuver_duration(ego_vehicle, total_clearance, a=3.5):
         """
         Stima il tempo necessario (in secondi) per completare l'intera manovra di sorpasso,
         utilizzando le equazioni del moto uniformemente accelerato.
@@ -250,5 +254,4 @@ class TrajectoryBypassEngine(BasicAgent):
             float: Tempo stimato in secondi.
         """
         v0 = get_speed(ego_vehicle) / 3.6
-        a = 3.5
         return (-v0 + math.sqrt(v0 ** 2 + 2 * a * total_clearance)) / a

@@ -43,7 +43,9 @@ class IntersectionNavigationEngine(BasicAgent):
         self._target_node = None
         self._topology_id = -1
         self._halt_frames = 0
-        self._mandatory_wait_time = 2
+        self._mandatory_wait_time = opt_dict.get('intersection_wait_time', 2.0)
+        self._right_turn_offset = opt_dict.get('intersection_right_turn_offset', -0.3)
+        self._node_search_radius = opt_dict.get('intersection_node_search_radius', 9.0)
         self._starboard_turn_frames = 0
 
     def evaluate_traversal_safety(self, local_planner, preview_steps):
@@ -96,9 +98,9 @@ class IntersectionNavigationEngine(BasicAgent):
         port_node = spatial_nodes['left'][0] if spatial_nodes['left'] else None
         starboard_node = spatial_nodes['right'][0] if spatial_nodes['right'] else None
 
-        v_ahead = self._get_ordered_vehicles(ahead_node, 9)[0] if ahead_node and self._get_ordered_vehicles(ahead_node,                                                                                              9) else None
-        v_port = self._get_ordered_vehicles(port_node, 9)[0] if port_node and self._get_ordered_vehicles(port_node,                                                                            9) else None
-        v_starboard = self._get_ordered_vehicles(starboard_node, 9)[0] if starboard_node and self._get_ordered_vehicles(starboard_node, 9) else None
+        v_ahead = self._get_ordered_vehicles(ahead_node, self._node_search_radius)[0] if ahead_node and self._get_ordered_vehicles(ahead_node, self._node_search_radius) else None
+        v_port = self._get_ordered_vehicles(port_node, self._node_search_radius)[0] if port_node and self._get_ordered_vehicles(port_node, self._node_search_radius) else None
+        v_starboard = self._get_ordered_vehicles(starboard_node, self._node_search_radius)[0] if starboard_node and self._get_ordered_vehicles(starboard_node, self._node_search_radius) else None
 
         if self._topology_id == IntersectionTopology.AHEAD_PORT:
             if not v_ahead and not v_port: return True
@@ -394,6 +396,6 @@ class IntersectionNavigationEngine(BasicAgent):
 
         if routing_directive == RoadOption.RIGHT and self._topology_id == IntersectionTopology.OMNIDIRECTIONAL:
             self._starboard_turn_frames = round(2 / self._world.get_snapshot().timestamp.delta_seconds)
-            self._local_planner.set_lateral_offset(-0.3)
+            self._local_planner.set_lateral_offset(self._right_turn_offset)
 
         return self._local_planner.run_step()

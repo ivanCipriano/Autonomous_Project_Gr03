@@ -50,7 +50,7 @@ class FleetProximityEvaluator(BaseEvaluator):
         if current_wp.lane_id == v_wp.lane_id and self.is_a_bicycle(vehicle.type_id):
             ego_yaw = abs(sys._vehicle.get_transform().rotation.yaw)
             v_yaw = abs(vehicle.get_transform().rotation.yaw)
-            if self.is_road_straight(ego_yaw=ego_yaw, vehicle_yaw=v_yaw):
+            if self.is_road_straight(ego_yaw=ego_yaw, vehicle_yaw=v_yaw, tolerance=sys._fleet_straight_tolerance):
                 if self.is_bicycle_near_center(vehicle_location=vehicle.get_location(),
                                           ego_vehicle_wp=current_wp) and get_speed(sys._vehicle) < 0.1:
                     print("--- [Cognition] Centered cyclist detected. Engaging bypass maneuver.")
@@ -137,7 +137,7 @@ class FleetProximityEvaluator(BaseEvaluator):
             bool: True se la distanza trasversale sull'asse Y risulta inferiore a una tolleranza prefissata (es. 0.3 metri),
                 False se il veicolo target è posizionato più vicini ai margini laterali della carreggiata.
         """
-        lane_center_offset = 0.3 
+        lane_center_offset = self.core_system._fleet_center_offset
         vehicle_y = vehicle_location.y
         lane_center_y = ego_vehicle_wp.transform.location.y
         return abs(vehicle_y - lane_center_y) < lane_center_offset

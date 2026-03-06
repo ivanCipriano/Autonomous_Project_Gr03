@@ -32,7 +32,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
         sys = self.core_system
 
         biped_list = sys._world.get_actors().filter("*walker.pedestrian*")
-        scan_radius = 12 if sys._navigation_engine.is_traversing else 20
+        scan_radius = sys._pedestrian_scan_junction if sys._navigation_engine.is_traversing else sys._pedestrian_scan_normal
         biped_list = [w for w in biped_list if
                       is_within_distance(w.get_transform(), sys._vehicle.get_transform(), scan_radius,
                                          angle_interval=[0, 90])]
