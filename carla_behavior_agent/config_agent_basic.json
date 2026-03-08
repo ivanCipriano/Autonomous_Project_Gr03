@@ -20,7 +20,7 @@
     "approach_speed": 10.0,
     "min_speed": 5.0,
     "rain_speed_penalty": 5.0,
-    "base_tlight_threshold": 5.0,
+    "base_tlight_threshold": 20.0,
     "base_sign_threshold": 20.0,
     "base_vehicle_threshold": 5.0,
     "detection_speed_ratio": 1.0,

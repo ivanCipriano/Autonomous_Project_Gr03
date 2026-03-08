@@ -31,24 +31,6 @@ def get_speed(vehicle):
 
     return 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
 
-def get_acceleration(vehicle):
-    """
-    Calcola l'accelerazione scalare di un veicolo espressa in metri al secondo quadrato (m/s^2).
-
-    Il metodo recupera il vettore accelerazione tridimensionale restituito dal simulatore CARLA e ne calcola la
-    norma euclidea. Nello stack di guida autonoma, questo dato è cruciale per la valutazione del comfort dei
-    passeggeri, per il calcolo degli spazi di frenata e per la modellazione della dinamica del veicolo.
-
-    Parametri:
-        vehicle (carla.Vehicle): L'istanza del veicolo di cui si desidera calcolare l'accelerazione.
-
-    Ritorna:
-        float: L'accelerazione corrente del veicolo espressa in m/s^2.
-    """
-    acc = vehicle.get_acceleration()
-
-    return math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2)
-
 def get_trafficlight_trigger_location(traffic_light):
     """
     Calcola la posizione globale esatta del volume di innesco (trigger volume) di un semaforo.
