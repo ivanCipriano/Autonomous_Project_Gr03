@@ -56,7 +56,6 @@ class BehaviorAgent(BasicAgent):
         self._incoming_direction = None
         self._incoming_waypoint = None
         self._look_ahead_steps = 0
-        self._min_speed = 5
         self._speed = 0
         self._speed_limit = 0
         self._stuck = False
@@ -79,9 +78,16 @@ class BehaviorAgent(BasicAgent):
             self._behavior = SimpleNamespace(**profiles[behavior])
         else:
             self._behavior = Cautious()
+        print(f"[INIT] Behavior profile set to: {behavior.capitalize()}")
 
         self._direction = None
         self._is_raining = False
+        
+        # Log collisioni
+        blueprint_library = self._world.get_blueprint_library()
+        collision_bp = blueprint_library.find('sensor.other.collision')
+        self._collision_sensor = self._world.spawn_actor(collision_bp, carla.Transform(), attach_to=self._vehicle)
+        self._collision_sensor.listen(lambda event: self._on_collision(event))
 
     def run_step(self, debug=False):
         """
@@ -220,7 +226,43 @@ class BehaviorAgent(BasicAgent):
 
         if self._navigation_engine.starboard_turn_frames > 0:
             self._navigation_engine.starboard_turn_frames -= 1
+            
+        if self._vehicle.is_at_traffic_light():
+            traffic_light = self._vehicle.get_traffic_light()
+            if traffic_light and traffic_light.get_state() == carla.TrafficLightState.Red:
+                if self._speed > 5.0:
+                    print("[INFRACTION] SEMAFORO ROSSO BRUCIATO!")
         
+        # Check Rischio Min Speed
+        vehicle_list = self._world.get_actors().filter("*vehicle*")
+        surrounding_speeds = []
+        
+        for v in vehicle_list:
+            if v.id != self._vehicle.id: 
+                if v.get_location().distance(self._vehicle.get_location()) < 50.0:
+                    v_speed = v.get_velocity().length() * 3.6
+                    if v_speed > 2.0: 
+                        surrounding_speeds.append(v_speed)
+
+        # Se ci sono auto in movimento intorno a noi
+        if len(surrounding_speeds) > 0:
+            avg_traffic_speed = sum(surrounding_speeds) / len(surrounding_speeds)
+        
+            if avg_traffic_speed > 10.0 and self._speed < (avg_traffic_speed * 0.70):
+                if not self._stuck and not self._is_raining and self._direction == RoadOption.LANEFOLLOW:
+                    percentage = (self._speed / avg_traffic_speed) * 100
+                    print(f"[INFRACTION] Average speed is {percentage:.2f}% of the surrounding traffic's one ({self._speed:.1f} km/h vs Traffico: {avg_traffic_speed:.1f} km/h)")
+
         if self._is_raining:
             print("[WORLD] It is raining!")
         print("[VEHICLE] Vehicle Speed: {0} - Speed Limit: {1}".format(self._speed, self._speed_limit))
+
+    def _on_collision(self, event):
+        """Callback eseguita istantaneamente ogni volta che il veicolo urta qualcosa"""
+        actor_type = event.other_actor.type_id
+        if "pedestrian" in actor_type:
+            print(f"\n[INFRACTION] COLLISIONE CON PEDONE! ID: {event.other_actor.id}")
+        elif "vehicle" in actor_type:
+            print(f"\n[INFRACTION] COLLISIONE CON VEICOLO! ID: {event.other_actor.id}")
+        else:
+            print(f"\n[INFRACTION] COLLISIONE CON OSTACOLO! Tipo: {actor_type}")
