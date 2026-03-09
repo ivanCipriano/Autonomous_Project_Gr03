@@ -225,7 +225,7 @@ def get_distance(a, b):
             return obj.get_location()
         else:
             raise ValueError(f"Invalid input type: {type(obj).__name__}. "
-                             "Expected carla.Actor, carla.Landmark, carla.Transform, carla.Waypoint, or carla.Location.")
+"Expected carla.Actor, carla.Landmark, carla.Transform, carla.Waypoint, or carla.Location.")
 
     loc_a = extract_location(a)
     loc_b = extract_location(b)

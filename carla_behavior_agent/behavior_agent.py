@@ -11,15 +11,15 @@ traffic signs, and has different possible configurations. """
 import carla
 from basic_agent import BasicAgent
 from local_planner import RoadOption
-from behavior_types import Cautious, Aggressive, Normal
-from tactical_modules.trajectory_bypass_engine import TrajectoryBypassEngine
+from behavior_types import Cautious
 from tactical_modules.intersection_navigation_engine import IntersectionNavigationEngine
-from cognitive_modules.signal_evaluator import TrafficSignalEvaluator
-from cognitive_modules.pedestrian_evaluator import BipedalHazardEvaluator
-from cognitive_modules.obstacle_evaluator import StaticObstructionEvaluator
-from cognitive_modules.stop_sign_evaluator import StopEvaluator
-from cognitive_modules.fleet_evaluator import FleetProximityEvaluator
+from tactical_modules.overtaking_engine import OvertakingEngine
 from cognitive_modules.cruise_evaluator import NavigationCruiseEvaluator
+from cognitive_modules.obstacle_evaluator import StaticObstacleEvaluator
+from cognitive_modules.pedestrian_evaluator import PedestrianEvaluator
+from cognitive_modules.signal_evaluator import TrafficSignalEvaluator
+from cognitive_modules.stop_sign_evaluator import StopEvaluator
+from cognitive_modules.traffic_evaluator import TrafficProximityEvaluator
 from misc import *
 from types import SimpleNamespace
 
@@ -60,17 +60,17 @@ class BehaviorAgent(BasicAgent):
         self._speed_limit = 0
         self._stuck = False
 
-        self._bypass_engine = TrajectoryBypassEngine(self._vehicle, opt_dict)
+        self._overtaking_engine = OvertakingEngine(self._vehicle, opt_dict)
         self._evaluators_chain = [
             TrafficSignalEvaluator(core_system=self),
-            BipedalHazardEvaluator(core_system=self),
-            StaticObstructionEvaluator(core_system=self),
+            PedestrianEvaluator(core_system=self),
+            StaticObstacleEvaluator(core_system=self),
             StopEvaluator(core_system=self),
-            FleetProximityEvaluator(core_system=self),
+            TrafficProximityEvaluator(core_system=self),
             NavigationCruiseEvaluator(core_system=self)
         ]
 
-        self._bypass_engine = TrajectoryBypassEngine(self._vehicle, opt_dict)
+        self._overtaking_engine = OvertakingEngine(self._vehicle, opt_dict)
         self._navigation_engine = IntersectionNavigationEngine(self._vehicle, opt_dict)
 
         profiles = opt_dict.get('behavior_profiles', {})
@@ -167,7 +167,7 @@ class BehaviorAgent(BasicAgent):
         """
         new_plan = self._local_planner.set_overtake_plan(
             overtake_plan=overtake_path,
-            overtake_distance=self._bypass_engine.required_clearance
+            overtake_distance=self._overtaking_engine.required_clearance
         )
         self.set_target_speed(2 * self._speed_limit)
         self.set_global_plan(new_plan)
@@ -212,13 +212,13 @@ class BehaviorAgent(BasicAgent):
         if self._behavior.tailgate_counter > 0:
             self._behavior.tailgate_counter -= 1       
 
-        if self._bypass_engine.evasion_lock > 0:
-            self._bypass_engine.evasion_lock -= 1
+        if self._overtaking_engine.evasion_lock > 0:
+            self._overtaking_engine.evasion_lock -= 1
            
-            if self._bypass_engine.evasion_lock == 0:
+            if self._overtaking_engine.evasion_lock == 0:
                 print("[MANOVRA] Sorpasso completato con successo. L'agente riprende la navigazione normale.\n")
         else:
-            self._bypass_engine.is_bypassing = False
+            self._overtaking_engine.is_overtaking = False
 
         if self._navigation_engine.is_traversing and self._navigation_engine.active_traversal_frames <= 0:
             self._navigation_engine.is_traversing = False
@@ -236,7 +236,6 @@ class BehaviorAgent(BasicAgent):
                 if self._speed > 5.0:
                     print("[INFRACTION] SEMAFORO ROSSO BRUCIATO!")
         
-        # Check Rischio Min Speed
         vehicle_list = self._world.get_actors().filter("*vehicle*")
         surrounding_speeds = []
         
@@ -247,7 +246,6 @@ class BehaviorAgent(BasicAgent):
                     if v_speed > 2.0: 
                         surrounding_speeds.append(v_speed)
 
-        # Se ci sono auto in movimento intorno a noi
         if len(surrounding_speeds) > 0:
             avg_traffic_speed = sum(surrounding_speeds) / len(surrounding_speeds)
         

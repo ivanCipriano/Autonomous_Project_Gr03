@@ -2,7 +2,7 @@ from .base_evaluator import BaseEvaluator
 from misc import compute_distance_from_center, is_within_distance, get_distance
 from local_planner import RoadOption
 
-class BipedalHazardEvaluator(BaseEvaluator):
+class PedestrianEvaluator(BaseEvaluator):
     """
     Valuta e gestisce i pericoli associati alla presenza di pedoni nell'ambiente.
 
@@ -11,7 +11,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
     deve frenare bruscamente o semplicemente rallentare.
     """
 
-    def _scan_for_bipeds(self, current_waypoint):
+    def _scan_for_pedestrians(self, current_waypoint):
         """
         Scansiona l'ambiente circostante per rilevare la presenza di pedoni nelle vicinanze.
 
@@ -76,7 +76,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
         if not current_waypoint:
             return None
 
-        hazard_detected, entity, raw_dist = self._scan_for_bipeds(current_waypoint)
+        hazard_detected, entity, raw_dist = self._scan_for_pedestrians(current_waypoint)
 
         if hazard_detected:
             actual_distance = compute_distance_from_center(

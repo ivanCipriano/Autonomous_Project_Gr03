@@ -1,4 +1,3 @@
-# cognitive_modules/base_evaluator.py
 import carla
 import numpy as np
 from misc import is_within_distance, get_distance, get_speed
@@ -145,7 +144,7 @@ class BaseEvaluator:
                     sys._behavior.tailgate_counter = 200
                     sys.set_destination(sys._local_planner.target_waypoint.transform.location, left_wpt.transform.location)
 
-    def scan_for_fleet(self, waypoint):
+    def scan_for_traffic(self, waypoint):
         """
         Scansiona l'ambiente circostante per rilevare flotte di veicoli o ciclisti.
 

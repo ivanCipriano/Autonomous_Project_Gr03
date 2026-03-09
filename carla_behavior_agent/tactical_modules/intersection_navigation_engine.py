@@ -12,10 +12,10 @@ class IntersectionTopology(IntEnum):
     Enumerazione che definisce la topologia di un incrocio in base alle direzioni di uscita disponibili.
     """
     NULL_STATE = -1
-    AHEAD_PORT = 0
-    AHEAD_STARBOARD = 1
-    PORT_STARBOARD = 2
-    OMNIDIRECTIONAL = 3
+    STRAIGHT_LEFT = 0
+    STRAIGHT_RIGHT = 1
+    LEFT_RIGHT = 2
+    ALL_DIRECTIONS = 3
 
 
 class IntersectionNavigationEngine(BasicAgent):
@@ -102,7 +102,7 @@ class IntersectionNavigationEngine(BasicAgent):
         v_port = self._get_ordered_vehicles(port_node, self._node_search_radius)[0] if port_node and self._get_ordered_vehicles(port_node, self._node_search_radius) else None
         v_starboard = self._get_ordered_vehicles(starboard_node, self._node_search_radius)[0] if starboard_node and self._get_ordered_vehicles(starboard_node, self._node_search_radius) else None
 
-        if self._topology_id == IntersectionTopology.AHEAD_PORT:
+        if self._topology_id == IntersectionTopology.STRAIGHT_LEFT:
             if not v_ahead and not v_port: return True
             if routing_directive == RoadOption.LEFT:
                 if not self._check_linear_trajectory(v_ahead) and not self._check_starboard_signal(v_ahead) and not self._check_port_signal(v_port): return True
@@ -110,7 +110,7 @@ class IntersectionNavigationEngine(BasicAgent):
                 if not self._check_port_signal(v_port): return True
             return False
 
-        elif self._topology_id == IntersectionTopology.AHEAD_STARBOARD:
+        elif self._topology_id == IntersectionTopology.STRAIGHT_RIGHT:
             if not v_ahead and not v_starboard: return True
             if routing_directive == RoadOption.RIGHT:
                 if not self._check_port_signal(v_ahead) or (self._check_port_signal(v_starboard) and get_speed(v_starboard) > 0.1): return True
@@ -118,7 +118,7 @@ class IntersectionNavigationEngine(BasicAgent):
                 if not self._check_port_signal(v_starboard) and not self._check_starboard_signal(v_starboard) and not self._check_port_signal(v_ahead): return True
             return False
 
-        elif self._topology_id == IntersectionTopology.PORT_STARBOARD:
+        elif self._topology_id == IntersectionTopology.LEFT_RIGHT:
             if not v_port and not v_starboard: return True
             if routing_directive == RoadOption.LEFT:
                 if not self._check_linear_trajectory(v_port) and not self._check_linear_trajectory(v_starboard) and not self._check_port_signal(v_starboard):
@@ -129,7 +129,7 @@ class IntersectionNavigationEngine(BasicAgent):
                 if not self._check_linear_trajectory(v_port): return True
             return False
 
-        elif self._topology_id == IntersectionTopology.OMNIDIRECTIONAL:
+        elif self._topology_id == IntersectionTopology.ALL_DIRECTIONS:
             if not v_ahead and not v_port and not v_starboard: return True
             if routing_directive == RoadOption.STRAIGHT:
                 if not self._check_port_signal(v_port) and not self._check_starboard_signal(v_starboard) and not self._check_port_signal(v_ahead) \
@@ -302,13 +302,13 @@ class IntersectionNavigationEngine(BasicAgent):
         oriented = self._categorize_spatial_nodes(pivot, outgoing_wps)
 
         if oriented['left'] and not oriented['right'] and oriented['front']:
-            return IntersectionTopology.AHEAD_PORT
+            return IntersectionTopology.STRAIGHT_LEFT
         elif not oriented['left'] and oriented['right'] and oriented['front']:
-            return IntersectionTopology.AHEAD_STARBOARD
+            return IntersectionTopology.STRAIGHT_RIGHT
         elif oriented['left'] and oriented['right'] and not oriented['front']:
-            return IntersectionTopology.PORT_STARBOARD
+            return IntersectionTopology.LEFT_RIGHT
         elif oriented['left'] and oriented['right'] and oriented['front']:
-            return IntersectionTopology.OMNIDIRECTIONAL
+            return IntersectionTopology.ALL_DIRECTIONS
         return IntersectionTopology.NULL_STATE
 
     @staticmethod
@@ -394,7 +394,7 @@ class IntersectionNavigationEngine(BasicAgent):
         self._active_traversal_frames = lock_frames
         self._is_traversing = True
 
-        if routing_directive == RoadOption.RIGHT and self._topology_id == IntersectionTopology.OMNIDIRECTIONAL:
+        if routing_directive == RoadOption.RIGHT and self._topology_id == IntersectionTopology.ALL_DIRECTIONS:
             self._starboard_turn_frames = round(2 / self._world.get_snapshot().timestamp.delta_seconds)
             self._local_planner.set_lateral_offset(self._right_turn_offset)
 
