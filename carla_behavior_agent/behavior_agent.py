@@ -214,6 +214,9 @@ class BehaviorAgent(BasicAgent):
 
         if self._bypass_engine.evasion_lock > 0:
             self._bypass_engine.evasion_lock -= 1
+           
+            if self._bypass_engine.evasion_lock == 0:
+                print("[MANOVRA] Sorpasso completato con successo. L'agente riprende la navigazione normale.\n")
         else:
             self._bypass_engine.is_bypassing = False
 

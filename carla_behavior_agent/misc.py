@@ -75,8 +75,8 @@ def get_trafficlight_trigger_location(traffic_light):
 
     return carla.Location(point_location.x, point_location.y, point_location.z)
 
-
 def is_within_distance(target_transform, reference_transform, max_distance, angle_interval=None):
+
     """
     Verifica se un target si trova entro un raggio specifico e in un determinato intervallo angolare rispetto a un riferimento.
 

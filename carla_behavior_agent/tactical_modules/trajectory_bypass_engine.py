@@ -30,6 +30,7 @@ class TrajectoryBypassEngine(BasicAgent):
         self._bypass_safety_margin = opt_dict.get('bypass_safety_margin', 3.0)
         self._bypass_search_radius = opt_dict.get('bypass_search_radius', 30.0)
         self._ego_acceleration_estimate = opt_dict.get('ego_acceleration_estimate', 3.5)
+        self._base_sign_threshold = opt_dict.get('base_sign_threshold', 10.0)
 
     def compute_evasion_trajectory(self, target_entity: carla.Actor, current_wp: carla.Waypoint,
                                    base_offset: float = 1, opposite_offset: float = 0,
@@ -50,6 +51,15 @@ class TrajectoryBypassEngine(BasicAgent):
         Returns:
             list o None: Lista di carla.Waypoint che definiscono la traiettoria di elusione, oppure None se la manovra non è sicura.
         """
+
+        try:
+            is_target_at_stop, _ = self._affected_by_sign(vehicle=target_entity, sign_type="206", max_distance=self._base_sign_threshold)
+            if is_target_at_stop:
+                print(f"[MANOVRA] Sorpasso annullato: il veicolo target (ID: {target_entity.id}) si trova ad uno STOP.")
+                return None
+        except AttributeError:
+            pass
+        
         if not opposite_offset:
             opposite_offset = self._estimate_opposite_clearance(target_entity, self._bypass_search_radius)
 
@@ -90,6 +100,14 @@ class TrajectoryBypassEngine(BasicAgent):
 
             self._evasion_lock_frames = int(round(maneuver_time) / self._world.get_snapshot().timestamp.delta_seconds)
             self._is_executing_bypass = True
+            
+            target_id = target_entity.id
+            target_type = target_entity.type_id if hasattr(target_entity, 'type_id') else "Sconosciuto"
+            print(f"\n[MANOVRA] Inizio manovra di sorpasso!")
+            print(f"  -> Veicolo target - ID: {target_id}, Tipo: {target_type}")
+            print(f"  -> Spazio richiesto: {self._required_clearance:.2f}m")
+            print(f"  -> Tempo stimato: {maneuver_time:.2f}s")
+
             return bypass_path
 
     @property

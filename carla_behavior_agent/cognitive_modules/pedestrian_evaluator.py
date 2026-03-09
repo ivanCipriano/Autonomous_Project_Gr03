@@ -2,7 +2,6 @@ from .base_evaluator import BaseEvaluator
 from misc import compute_distance_from_center, is_within_distance, get_distance
 from local_planner import RoadOption
 
-
 class BipedalHazardEvaluator(BaseEvaluator):
     """
     Valuta e gestisce i pericoli associati alla presenza di pedoni nell'ambiente.
@@ -25,7 +24,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
 
         Returns:
             tuple: Una tupla contenente tre elementi:
-                - bool: True se è stato rilevato un pedone pericoloso, False altrimenti.
+                - bool: True se Ã¨ stato rilevato un pedone pericoloso, False altrimenti.
                 - object o None: L'oggetto che rappresenta il pedone rilevato, None se assente.
                 - float: La distanza dal pedone rilevato, oppure -1 se non ci sono pedoni.
         """
@@ -38,6 +37,7 @@ class BipedalHazardEvaluator(BaseEvaluator):
                                          angle_interval=[0, 90])]
 
         if not biped_list:
+            print("Nessun Pedone")
             return False, None, -1
 
         v_speed_limit = sys._vehicle.get_speed_limit()
@@ -46,16 +46,14 @@ class BipedalHazardEvaluator(BaseEvaluator):
             return True, biped_list[0], get_distance(biped_list[0], current_waypoint)
 
         elif sys._direction == RoadOption.CHANGELANELEFT:
-            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2),
-                                                  up_angle_th=90, lane_offset=-1)
+            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2), lane_offset=-1)
 
         elif sys._direction == RoadOption.CHANGELANERIGHT:
-            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2),
-                                                  up_angle_th=90, lane_offset=1)
+            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2), lane_offset=1)
 
         else:
-            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2),
-                                                  up_angle_th=90)
+            print("Vedo un pedone dritto")
+            return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2))
 
     def evaluate(self, **kwargs):
         """

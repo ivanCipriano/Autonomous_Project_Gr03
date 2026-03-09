@@ -31,9 +31,9 @@
     "fleet_straight_tolerance": 10.0,
     "fleet_center_offset": 0.3,
     "intersection_wait_time": 2.0,
-    "intersection_right_turn_offset": -0.3,
+    "intersection_right_turn_offset": -0.2,
     "intersection_node_search_radius": 9.0,
-    "bypass_safety_margin": 3.0,
+    "bypass_safety_margin": 1.5,
     "bypass_search_radius": 30.0,
     "ego_acceleration_estimate": 3.5,
     "behavior_profiles": {

@@ -127,30 +127,23 @@ class BaseEvaluator:
         speed_limit = sys._vehicle.get_speed_limit()
 
         behind_v_state, behind_v, _ = sys._vehicle_obstacle_detected(
-            vehicle_list, max(sys._behavior.min_proximity_threshold, speed_limit / 2), up_angle_th=180,
-            low_angle_th=160)
+            vehicle_list, max(sys._behavior.min_proximity_threshold, speed_limit / 2))
 
         if behind_v_state and sys._speed < get_speed(behind_v):
             if (
                     right_turn == carla.LaneChange.Right or right_turn == carla.LaneChange.Both) and waypoint.lane_id * right_wpt.lane_id > 0 and right_wpt.lane_type == carla.LaneType.Driving:
-                new_v_state, _, _ = sys._vehicle_obstacle_detected(vehicle_list,
-                                                                   max(sys._behavior.min_proximity_threshold,
-                                                                       speed_limit / 2), up_angle_th=180, lane_offset=1)
+                new_v_state, _, _ = sys._vehicle_obstacle_detected(vehicle_list, max(sys._behavior.min_proximity_threshold, speed_limit / 2))
                 if not new_v_state:
                     print("[Cognition] -> Engaging right evasion to clear lane.")
                     sys._behavior.tailgate_counter = 200
                     sys.set_destination(sys._local_planner.target_waypoint.transform.location,
                                         right_wpt.transform.location)
             elif left_turn == carla.LaneChange.Left and waypoint.lane_id * left_wpt.lane_id > 0 and left_wpt.lane_type == carla.LaneType.Driving:
-                new_v_state, _, _ = sys._vehicle_obstacle_detected(vehicle_list,
-                                                                   max(sys._behavior.min_proximity_threshold,
-                                                                       speed_limit / 2), up_angle_th=180,
-                                                                   lane_offset=-1)
+                new_v_state, _, _ = sys._vehicle_obstacle_detected(vehicle_list, max(sys._behavior.min_proximity_threshold, speed_limit / 2), lane_offset=-1)
                 if not new_v_state:
                     print("[Cognition] -> Engaging left evasion to clear lane.")
                     sys._behavior.tailgate_counter = 200
-                    sys.set_destination(sys._local_planner.target_waypoint.transform.location,
-                                        left_wpt.transform.location)
+                    sys.set_destination(sys._local_planner.target_waypoint.transform.location, left_wpt.transform.location)
 
     def scan_for_fleet(self, waypoint):
         """
@@ -179,8 +172,7 @@ class BaseEvaluator:
             return False, None, -1
 
         bicycle_list = [b for b in v_list if
-                        self.is_a_bicycle(b.type_id) and is_within_distance(b.get_transform(), sys._vehicle.get_transform(),
-                                                                       10, angle_interval=[0, 90])]
+                        self.is_a_bicycle(b.type_id) and is_within_distance(b.get_transform(), sys._vehicle.get_transform(), 10, angle_interval=[0, 90])]
         if len(bicycle_list) == 1:
             print('[Cognition] -> Cyclist track intercepted.')
             return True, bicycle_list[0], get_distance(bicycle_list[0], waypoint)
@@ -188,16 +180,11 @@ class BaseEvaluator:
         speed_limit = sys._vehicle.get_speed_limit()
 
         if sys._direction == RoadOption.CHANGELANELEFT:
-            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold,
-                                                                                speed_limit / 2), up_angle_th=180,
-                                                                    lane_offset=-1)
+            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold,speed_limit / 2), lane_offset=-1)
         elif sys._direction == RoadOption.CHANGELANERIGHT:
-            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold,
-                                                                                speed_limit / 2), up_angle_th=180,
-                                                                    lane_offset=1)
+            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold, speed_limit / 2), lane_offset=1)
         else:
-            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold,
-                                                                                speed_limit / 3), up_angle_th=30)
+            v_state, v_obj, v_dist = sys._vehicle_obstacle_detected(v_list, max(sys._behavior.min_proximity_threshold, speed_limit / 3))
             if v_state:
                 v_wp = sys._map.get_waypoint(v_obj.get_location())
                 if v_wp.is_junction:

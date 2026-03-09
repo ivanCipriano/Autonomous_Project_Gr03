@@ -56,8 +56,7 @@ class StopEvaluator(BaseEvaluator):
                 return self.halt_vehicle()
             elif v_state and actual_dist > 5:
                 print("--- [Cognition] Stop distant. Switching to adaptive cruise for lead vehicle.")
-                follow_dist = compute_distance_from_center(actor1=sys._vehicle, actor2=lead_v,
-                                                           distance=get_distance(sys._vehicle, lead_v))
+                follow_dist = compute_distance_from_center(actor1=sys._vehicle, actor2=lead_v, distance=get_distance(sys._vehicle, lead_v))
                 return self.adaptive_cruise_control(target_vehicle=lead_v, distance=follow_dist)
             else:
                 print("--- [Cognition] Stop distant. Decelerating to approach velocity.")

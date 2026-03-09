@@ -49,9 +49,7 @@ class StaticObstructionEvaluator(BaseEvaluator):
         if "constructioncone" in element_query:
             return True, obs_list[0], get_distance(obs_list[0], current_waypoint)
 
-        return sys._vehicle_obstacle_detected(
-            obs_list, max(sys._behavior.min_proximity_threshold, sys._speed_limit / 2), up_angle_th=60
-        )
+        return sys._vehicle_obstacle_detected(obs_list, max(sys._behavior.min_proximity_threshold, sys._speed_limit / 2))
 
     def evaluate(self, **kwargs):
         """

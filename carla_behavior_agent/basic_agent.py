@@ -5,7 +5,7 @@
 
 
 import carla
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPoint
 
 from local_planner import LocalPlanner, RoadOption
 from global_route_planner import GlobalRoutePlanner
@@ -396,24 +396,27 @@ class BasicAgent(object):
                 return True, signs_list[0]
         return False, None
 
-
-    def _vehicle_obstacle_detected(self, vehicle_list=None, max_distance=None, up_angle_th=90, low_angle_th=0, lane_offset=0):
+    def _vehicle_obstacle_detected(self, vehicle_list=None, max_distance=None, lane_offset=0):
         """
-        Rileva la presenza di veicoli ostacolo calcolando l'intersezione tra il poligono
-        del percorso futuro dell'ego vehicle e le bounding box degli altri veicoli.
+        Rileva la presenza di veicoli o pedoni ostacolo calcolando l'intersezione tra il poligono
+        spaziale del percorso futuro dell'ego vehicle e le bounding box degli altri attori.
+
+        Questa versione ottimizzata costruisce geometricamente un corridoio 2D valido che
+        rappresenta la traiettoria spazzata dall'auto e utilizza la convex hull per
+        proiettare l'impronta a terra degli ostacoli. Ciò garantisce il rilevamento
+        preciso anche di attori "accartocciati" o sdraiati a terra (es. pedoni caduti).
 
         Args:
-            vehicle_list (list, opzionale): Lista dei veicoli da esaminare.
-            max_distance (float, opzionale): Distanza massima entro cui cercare pericoli.
-            up_angle_th (float, opzionale): Soglia dell'angolo superiore (non usata in
-                                            questa versione basata su poligoni, mantenuta
-                                            per compatibilità della firma).
-            low_angle_th (float, opzionale): Soglia dell'angolo inferiore.
-            lane_offset (int, opzionale): Variazione della corsia in cui cercare l'ostacolo.
+            vehicle_list (list, opzionale): Lista degli attori (veicoli/pedoni) da esaminare.
+                                            Se None, recupera tutti i veicoli nella scena.
+            max_distance (float, opzionale): Distanza massima entro cui calcolare e cercare pericoli.
+                                             Se None, utilizza la soglia di base del comportamento.
+            lane_offset (int, opzionale): Variazione della corsia in cui proiettare il corridoio
+                                          di ricerca (es. -1 per cercare ostacoli nella corsia di sinistra).
 
         Returns:
-            tuple: (bool, carla.Vehicle o None, float) Rispettivamente indicatore di pericolo,
-                   veicolo target rilevato e distanza da esso (-1 se libero).
+            tuple: (bool, carla.Actor o None, float) Rispettivamente indicatore di pericolo (True se presente),
+                   l'attore target rilevato e la distanza spaziale 3D da esso (-1 se la via è libera).
         """
         if self._ignore_vehicles:
             return (False, None, -1)
@@ -438,45 +441,72 @@ class BasicAgent(object):
             y=ego_extent * ego_forward_vector.y,
         )
 
+        right_points = []
+        left_points = []
+
+        ego_location = ego_transform.location
+        extent_y = self._vehicle.bounding_box.extent.y
+        r_vec = ego_transform.get_right_vector()
+
+        p1 = ego_location + carla.Location(extent_y * r_vec.x, extent_y * r_vec.y)
+        p2 = ego_location + carla.Location(-extent_y * r_vec.x, -extent_y * r_vec.y)
+        right_points.append([p1.x, p1.y, p1.z])
+        left_points.append([p2.x, p2.y, p2.z])
+
+        for wp, _ in self._local_planner.get_plan():
+            if ego_location.distance(wp.transform.location) > max_distance:
+                break
+            r_vec = wp.transform.get_right_vector()
+            p1 = wp.transform.location + carla.Location(extent_y * r_vec.x, extent_y * r_vec.y)
+            p2 = wp.transform.location + carla.Location(-extent_y * r_vec.x, -extent_y * r_vec.y)
+            right_points.append([p1.x, p1.y, p1.z])
+            left_points.append([p2.x, p2.y, p2.z])
+
+        if len(right_points) + len(left_points) < 3:
+            return (False, None, -1)
+
+        route_bb = right_points + left_points[::-1]
+        ego_polygon = Polygon(route_bb)
+
+        if not ego_polygon.is_valid:
+            ego_polygon = ego_polygon.buffer(0)
+
         for target_vehicle in vehicle_list:
-            target_transform = target_vehicle.get_transform()
-            target_wpt = self._map.get_waypoint(target_transform.location, lane_type=carla.LaneType.Any)
+            if target_vehicle.id == self._vehicle.id:
+                continue
 
-            route_bb = []
-            ego_location = ego_transform.location
-            extent_y = self._vehicle.bounding_box.extent.y
-            r_vec = ego_transform.get_right_vector()
-            p1 = ego_location + carla.Location(extent_y * r_vec.x, extent_y * r_vec.y)
-            p2 = ego_location + carla.Location(-extent_y * r_vec.x, -extent_y * r_vec.y)
-            route_bb.append([p1.x, p1.y, p1.z])
-            route_bb.append([p2.x, p2.y, p2.z])
+            target_location = target_vehicle.get_location()
 
-            for wp, _ in self._local_planner.get_plan():
-                if ego_location.distance(wp.transform.location) > max_distance:
-                    break
-                r_vec = wp.transform.get_right_vector()
-                p1 = wp.transform.location + carla.Location(extent_y * r_vec.x, extent_y * r_vec.y)
-                p2 = wp.transform.location + carla.Location(-extent_y * r_vec.x, -extent_y * r_vec.y)
-                route_bb.append([p1.x, p1.y, p1.z])
-                route_bb.append([p2.x, p2.y, p2.z])
+            # --- NUOVO FIX (Asse Z): Ignora pedoni sottoterra o oggetti volanti ---
+            z_diff = abs(ego_location.z - target_location.z)
+            if z_diff >= 2.5:
+                # Scommenta queste print se vuoi vedere anche i glitch scartati
+                print(f"[IGNORATO] Attore {target_vehicle.type_id} scartato per Z_diff ({z_diff:.2f}m).")
+                print(f"  -> Ego Z: {ego_location.z:.2f} | Target Z: {target_location.z:.2f}")
+                continue
 
-            if len(route_bb) < 3:
-                return (False, None, -1)
+            if ego_location.distance(target_location) > max_distance:
+                continue
 
-            ego_polygon = Polygon(route_bb)
+            target_bb = target_vehicle.bounding_box
+            target_vertices = target_bb.get_world_vertices(target_vehicle.get_transform())
+            target_list = [[v.x, v.y, v.z] for v in target_vertices]
 
-            for target_vehicle in vehicle_list:
-                if target_vehicle.id == self._vehicle.id:
-                    continue
-                if ego_location.distance(target_vehicle.get_location()) > max_distance:
-                    continue
-                target_bb = target_vehicle.bounding_box
-                target_vertices = target_bb.get_world_vertices(target_vehicle.get_transform())
-                target_list = [[v.x, v.y, v.z] for v in target_vertices]
-                target_polygon = Polygon(target_list)
+            target_polygon = MultiPoint(target_list).convex_hull
 
-                if ego_polygon.intersects(target_polygon):
-                    return (True, target_vehicle, compute_distance(target_vehicle.get_location(), ego_location))
+            if ego_polygon.intersects(target_polygon):
+                # --- STAMPE DETTAGLIATE DELL'OSTACOLO ---
+                target_type = target_vehicle.type_id
+                print("\n" + "=" * 50)
+                print(f"[OBSTACLE DETECTED] Valid Intersection Found!")
+                print(f" - ID: {target_vehicle.id}")
+                print(f" - Type: {target_type} (Macchina/Bici/Pedone)")
+                print(f" - Ego Vehicle Z   : {ego_location.z:.3f} m")
+                print(f" - Target Object Z : {target_location.z:.3f} m")
+                print(f" - Z-Difference    : {z_diff:.3f} m")
+                print("=" * 50 + "\n")
+
+                return (True, target_vehicle, compute_distance(target_location, ego_location))
 
         return (False, None, -1)
 
