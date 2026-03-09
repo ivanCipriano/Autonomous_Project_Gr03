@@ -1,0 +1,68 @@
+{
+    "sensors" : [
+            {"type": "sensor.camera.rgb", "id": "Center",
+            "x": 0.7, "y": 0.0, "z": 1.60, "roll": 0.0, "pitch": 0.0, "yaw": 0.0, "width": 300, "height": 200, "fov": 100},
+            {"type": "sensor.lidar.ray_cast", "id": "LIDAR",
+            "x": 0.7, "y": -0.4, "z": 1.60, "roll": 0.0, "pitch": 0.0, "yaw": -45.0},
+            {"type": "sensor.other.radar", "id": "RADAR",
+            "x": 0.7, "y": -0.4, "z": 1.60, "roll": 0.0, "pitch": 0.0, "yaw": -45.0, "horizontal_fov": 30, "vertical_fov": 30},
+            {"type": "sensor.other.gnss", "id": "GPS",
+            "x": 0.7, "y": -0.4, "z": 1.60},
+            {"type": "sensor.other.imu", "id": "IMU",
+            "x": 0.7, "y": -0.4, "z": 1.60, "roll": 0.0, "pitch": 0.0, "yaw": -45.0},
+            {"type": "sensor.speedometer", "id": "Speed"}
+    ],
+    "longitudinal_control_dict" :{"K_P": 0.888, "K_I": 0.0768, "K_D": 0.05, "dt": 0.03},
+    "lateral_control_dict" : {"K_V": 4.0, "K_S": 1.0, "dt": 0.03},
+    "target_speed": 30.0,
+    "Visualizer_IP" : "172.16.174.233",
+    "SaveSpeedData" : "speed.txt",
+    "approach_speed": 10.0,
+    "min_speed": 5.0,
+    "rain_speed_penalty": 5.0,
+    "base_tlight_threshold": 20.0,
+    "base_sign_threshold": 20.0,
+    "base_vehicle_threshold": 5.0,
+    "detection_speed_ratio": 1.0,
+    "pedestrian_scan_normal": 20.0,
+    "pedestrian_scan_junction": 12.0,
+    "obstacle_scan_radius": 20.0,
+    "obstacle_critical_dist": 6.0,
+    "fleet_straight_tolerance": 10.0,
+    "fleet_center_offset": 0.3,
+    "intersection_wait_time": 2.0,
+    "intersection_right_turn_offset": -0.2,
+    "intersection_node_search_radius": 9.0,
+    "overtake_safety_margin": 1.5,
+    "overtake_search_radius": 30.0,
+    "ego_acceleration_estimate": 3.5,
+    "behavior_profiles": {
+        "cautious": {
+            "max_speed": 30,
+            "speed_lim_dist": 6,
+            "speed_decrease": 12,
+            "safety_time": 3,
+            "min_proximity_threshold": 12,
+            "braking_distance": 6,
+            "tailgate_counter": 0
+        },
+        "normal": {
+            "max_speed": 50,
+            "speed_lim_dist": 3,
+            "speed_decrease": 10,
+            "safety_time": 3,
+            "min_proximity_threshold": 10,
+            "braking_distance": 5,
+            "tailgate_counter": 0
+        },
+        "aggressive": {
+            "max_speed": 70,
+            "speed_lim_dist": 1,
+            "speed_decrease": 8,
+            "safety_time": 3,
+            "min_proximity_threshold": 8,
+            "braking_distance": 4,
+            "tailgate_counter": -1
+        }
+    }
+}
