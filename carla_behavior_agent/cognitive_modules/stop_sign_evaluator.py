@@ -39,7 +39,7 @@ class StopEvaluator(BaseEvaluator):
         sys = self.core_system
         current_wp = kwargs.get('ego_vehicle_wp')
 
-        v_state, lead_v, _ = self.scan_for_fleet(current_wp)
+        v_state, lead_v, _ = self.scan_for_traffic(current_wp)
         is_stop, _, s_dist = self._detect_stop_regulation(vehicle=sys._vehicle, sign_distance=20)
 
         if is_stop:

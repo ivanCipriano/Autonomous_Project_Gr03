@@ -1,9 +1,8 @@
-# cognitive_modules/obstacle_evaluator.py
 from .base_evaluator import BaseEvaluator
 from misc import compute_distance_from_center, is_within_distance, get_distance
 
 
-class StaticObstructionEvaluator(BaseEvaluator):
+class StaticObstacleEvaluator(BaseEvaluator):
     """
     Classe responsabile della valutazione e gestione degli ostacoli statici presenti nell'ambiente di simulazione.
 
@@ -14,7 +13,7 @@ class StaticObstructionEvaluator(BaseEvaluator):
     Questa classe implementa la logica necessaria per risolvere scenari critici legati all'ostruzione della carreggiata.
     """
 
-    def _detect_static_hazards(self, current_waypoint, element_query, angle_interval=[0, 90]):
+    def _detect_static_obstacles(self, current_waypoint, element_query, angle_interval=[0, 90]):
         """
         Rileva la presenza di pericoli statici specifici nell'area circostante l'ego-veicolo.
 
@@ -76,26 +75,26 @@ class StaticObstructionEvaluator(BaseEvaluator):
             return None
 
         sys = self.core_system
-        hazard_flag, hazard_obj, hazard_dist = self._detect_static_hazards(current_waypoint,
+        hazard_flag, hazard_obj, hazard_dist = self._detect_static_obstacles(current_waypoint,
                                                                            "*static.prop.trafficwarning*")
-        cone_flag, cone_obj, _ = self._detect_static_hazards(current_waypoint, "*static.prop.constructioncone*")
+        cone_flag, cone_obj, _ = self._detect_static_obstacles(current_waypoint, "*static.prop.constructioncone*")
 
         sys.environmental_hazards = {'tw_state': hazard_flag, 'cone_state': cone_flag}
 
         if hazard_flag is True:
             actual_dist = compute_distance_from_center(actor1=sys._vehicle, actor2=hazard_obj, distance=hazard_dist)
 
-            evasion_path = sys._bypass_engine.compute_evasion_trajectory(hazard_obj, current_waypoint, 1, 20, actual_dist, sys._speed_limit)
+            evasion_path = sys._overtaking_engine.compute_evasion_trajectory(hazard_obj, current_waypoint, 1, 20, actual_dist, sys._speed_limit)
 
             if evasion_path:
                 print("[Cognition] -> Trajectory alteration: bypassing environmental hazard.")
                 sys._BehaviorAgent__update_global_plan(overtake_path=evasion_path)
 
-            if not sys._bypass_engine.is_bypassing and actual_dist < sys._obstacle_critical_dist:
+            if not sys._overtaking_engine.is_overtaking and actual_dist < sys._obstacle_critical_dist:
                 print("--- [Cognition] Bypass unfeasible. Executing critical halt.")
                 return self.halt_vehicle()
 
-        elif not hazard_flag and cone_flag and not sys._bypass_engine.is_bypassing:
+        elif not hazard_flag and cone_flag and not sys._overtaking_engine.is_overtaking:
             o_loc = cone_obj.get_location()
             o_wp = sys._map.get_waypoint(o_loc)
 

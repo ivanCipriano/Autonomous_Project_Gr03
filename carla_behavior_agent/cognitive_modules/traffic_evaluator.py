@@ -1,9 +1,8 @@
-# cognitive_modules/fleet_evaluator.py
 from .base_evaluator import BaseEvaluator
 from misc import compute_distance_from_center, get_speed
 
 
-class FleetProximityEvaluator(BaseEvaluator):
+class TrafficProximityEvaluator(BaseEvaluator):
     """
     Classe responsabile della valutazione di prossimità e delle interazioni con altri veicoli o elementi mobili nell'ambiente.
 
@@ -38,7 +37,7 @@ class FleetProximityEvaluator(BaseEvaluator):
         current_wp = kwargs.get('ego_vehicle_wp')
         debug_mode = kwargs.get('debug', False)
 
-        v_state, vehicle, v_dist = self.scan_for_fleet(current_wp)
+        v_state, vehicle, v_dist = self.scan_for_traffic(current_wp)
 
         if not v_state:
             return None
@@ -54,7 +53,7 @@ class FleetProximityEvaluator(BaseEvaluator):
                 if self.is_bicycle_near_center(vehicle_location=vehicle.get_location(),
                                           ego_vehicle_wp=current_wp) and get_speed(sys._vehicle) < 0.1:
                     print("--- [Cognition] Centered cyclist detected. Engaging bypass maneuver.")
-                    bypass_path = sys._bypass_engine.compute_evasion_trajectory(
+                    bypass_path = sys._overtaking_engine.compute_evasion_trajectory(
                         target_entity=vehicle,
                         current_wp=current_wp,
                         base_offset=1,
@@ -62,7 +61,7 @@ class FleetProximityEvaluator(BaseEvaluator):
                         max_velocity=sys._speed_limit
                     )
                     if bypass_path: sys._BehaviorAgent__update_global_plan(overtake_path=bypass_path)
-                    if not sys._bypass_engine.is_bypassing: return self.halt_vehicle()
+                    if not sys._overtaking_engine.is_overtaking: return self.halt_vehicle()
                 else:
                     print("--- [Cognition] Cyclist offset. Applying lateral displacement.")
                     sys._local_planner.set_lateral_offset(
@@ -85,7 +84,7 @@ class FleetProximityEvaluator(BaseEvaluator):
             return self.halt_vehicle()
 
         elif v_wp.lane_id == current_wp.lane_id and is_parked and not current_wp.is_junction:
-            bypass_path = sys._bypass_engine.compute_evasion_trajectory(
+            bypass_path = sys._overtaking_engine.compute_evasion_trajectory(
                 target_entity=vehicle,
                 current_wp=current_wp,
                 base_offset=1,
@@ -93,7 +92,7 @@ class FleetProximityEvaluator(BaseEvaluator):
                 max_velocity=sys._speed_limit
             )
             if bypass_path: sys._BehaviorAgent__update_global_plan(overtake_path=bypass_path)
-            if not sys._bypass_engine.is_bypassing: return self.halt_vehicle()
+            if not sys._overtaking_engine.is_overtaking: return self.halt_vehicle()
             return sys._BehaviorAgent__normal_behaviour(debug=debug_mode)
 
         else:

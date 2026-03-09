@@ -4,7 +4,7 @@ from basic_agent import BasicAgent
 from misc import get_distance, is_within_distance, compute_distance_from_center, get_speed
 
 
-class TrajectoryBypassEngine(BasicAgent):
+class OvertakingEngine(BasicAgent):
     """
     Motore tattico dedicato alla pianificazione e generazione di traiettorie per l'elusione e il sorpasso di ostacoli.
     Gestisce in autonomia la stima degli spazi, il controllo del traffico in senso opposto e la creazione del percorso.
@@ -27,8 +27,8 @@ class TrajectoryBypassEngine(BasicAgent):
         self._evasion_lock_frames = 0
         self._is_executing_bypass = False
         self._required_clearance = 0
-        self._bypass_safety_margin = opt_dict.get('bypass_safety_margin', 3.0)
-        self._bypass_search_radius = opt_dict.get('bypass_search_radius', 30.0)
+        self._overtake_safety_margin = opt_dict.get('overtake_safety_margin', 3.0)
+        self._overtake_search_radius = opt_dict.get('overtake_search_radius', 30.0)
         self._ego_acceleration_estimate = opt_dict.get('ego_acceleration_estimate', 3.5)
         self._base_sign_threshold = opt_dict.get('base_sign_threshold', 10.0)
 
@@ -61,7 +61,7 @@ class TrajectoryBypassEngine(BasicAgent):
             pass
         
         if not opposite_offset:
-            opposite_offset = self._estimate_opposite_clearance(target_entity, self._bypass_search_radius)
+            opposite_offset = self._estimate_opposite_clearance(target_entity, self._overtake_search_radius)
 
         v_length = self._vehicle.bounding_box.extent.x
         l_width = current_wp.lane_width
@@ -83,7 +83,7 @@ class TrajectoryBypassEngine(BasicAgent):
                 next_oncoming_wp = self._map.get_waypoint(oncoming_entity.get_location()).next(oncoming_travel_dist)[0]
                 collision_risk = not is_within_distance(target_transform=next_oncoming_wp.transform,
                                                         reference_transform=next_ego_wp.transform,
-                                                        max_distance=self._bypass_search_radius,
+                                                        max_distance=self._overtake_search_radius,
                                                         angle_interval=[0, 90])
         except Exception:
             collision_risk = False
@@ -111,7 +111,7 @@ class TrajectoryBypassEngine(BasicAgent):
             return bypass_path
 
     @property
-    def is_bypassing(self):
+    def is_overtaking(self):
         """
         Proprietà che indica se il veicolo sta attualmente eseguendo una manovra di sorpasso/elusione.
 
@@ -120,8 +120,8 @@ class TrajectoryBypassEngine(BasicAgent):
         """
         return self._is_executing_bypass
 
-    @is_bypassing.setter
-    def is_bypassing(self, val):
+    @is_overtaking.setter
+    def is_overtaking(self, val):
         """
         Imposta lo stato di esecuzione della manovra di sorpasso.
 
@@ -203,7 +203,7 @@ class TrajectoryBypassEngine(BasicAgent):
             distance_other_lane += v.bounding_box.extent.x + v_distance
             previous_vehicle = v
 
-        return distance_other_lane + self._bypass_safety_margin
+        return distance_other_lane + self._overtake_safety_margin
 
     def _detect_oncoming_traffic(self, ego_wp, search_distance = 30):
         """

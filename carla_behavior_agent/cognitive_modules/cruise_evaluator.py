@@ -1,4 +1,3 @@
-# cognitive_modules/cruise_evaluator.py
 from .base_evaluator import BaseEvaluator
 from local_planner import RoadOption
 
