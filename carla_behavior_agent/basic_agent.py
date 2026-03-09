@@ -477,12 +477,8 @@ class BasicAgent(object):
 
             target_location = target_vehicle.get_location()
 
-            # --- NUOVO FIX (Asse Z): Ignora pedoni sottoterra o oggetti volanti ---
             z_diff = abs(ego_location.z - target_location.z)
             if z_diff >= 2.5:
-                # Scommenta queste print se vuoi vedere anche i glitch scartati
-                print(f"[IGNORATO] Attore {target_vehicle.type_id} scartato per Z_diff ({z_diff:.2f}m).")
-                print(f"  -> Ego Z: {ego_location.z:.2f} | Target Z: {target_location.z:.2f}")
                 continue
 
             if ego_location.distance(target_location) > max_distance:
@@ -495,17 +491,6 @@ class BasicAgent(object):
             target_polygon = MultiPoint(target_list).convex_hull
 
             if ego_polygon.intersects(target_polygon):
-                # --- STAMPE DETTAGLIATE DELL'OSTACOLO ---
-                target_type = target_vehicle.type_id
-                print("\n" + "=" * 50)
-                print(f"[OBSTACLE DETECTED] Valid Intersection Found!")
-                print(f" - ID: {target_vehicle.id}")
-                print(f" - Type: {target_type} (Macchina/Bici/Pedone)")
-                print(f" - Ego Vehicle Z   : {ego_location.z:.3f} m")
-                print(f" - Target Object Z : {target_location.z:.3f} m")
-                print(f" - Z-Difference    : {z_diff:.3f} m")
-                print("=" * 50 + "\n")
-
                 return (True, target_vehicle, compute_distance(target_location, ego_location))
 
         return (False, None, -1)

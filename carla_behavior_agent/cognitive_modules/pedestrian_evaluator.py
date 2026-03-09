@@ -37,7 +37,6 @@ class PedestrianEvaluator(BaseEvaluator):
                                          angle_interval=[0, 90])]
 
         if not biped_list:
-            print("Nessun Pedone")
             return False, None, -1
 
         v_speed_limit = sys._vehicle.get_speed_limit()
@@ -52,7 +51,6 @@ class PedestrianEvaluator(BaseEvaluator):
             return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2), lane_offset=1)
 
         else:
-            print("Vedo un pedone dritto")
             return sys._vehicle_obstacle_detected(biped_list, max(sys._behavior.min_proximity_threshold, v_speed_limit / 2))
 
     def evaluate(self, **kwargs):
