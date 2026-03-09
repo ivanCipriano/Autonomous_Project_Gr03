@@ -51,7 +51,7 @@ class TrajectoryBypassEngine(BasicAgent):
         Returns:
             list o None: Lista di carla.Waypoint che definiscono la traiettoria di elusione, oppure None se la manovra non è sicura.
         """
-
+        # Controlla se il veicolo da sorpassare si trova in prossimità di uno STOP (id "206")
         try:
             is_target_at_stop, _ = self._affected_by_sign(vehicle=target_entity, sign_type="206", max_distance=self._base_sign_threshold)
             if is_target_at_stop:
